@@ -65,20 +65,55 @@ async def touch_conversation(
     )
 
 
-async def list_conversations(limit: int = 50):
+async def list_conversations(
+    limit: int = 50,
+):
     pool = get_pool()
+
     rows = await pool.fetch(
         """
         SELECT
-            id,
-            title,
-            created_at,
-            updated_at
-        FROM conversations
-        ORDER BY updated_at DESC
+            c.id,
+            c.title,
+            c.created_at,
+            c.updated_at
+        FROM conversations c
+        WHERE EXISTS (
+            SELECT 1
+            FROM messages m
+            WHERE m.conversation_id = c.id
+              AND m.role = 'user'
+        )
+        ORDER BY c.updated_at DESC
         LIMIT $1
         """,
         limit,
     )
 
     return [dict(row) for row in rows]
+
+
+async def update_conversation_title(
+    conversation_id: UUID,
+    title: str,
+):
+    pool = get_pool()
+
+    row = await pool.fetchrow(
+        """
+        UPDATE conversations
+        SET
+            title = $2,
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING
+            id,
+            title,
+            created_at,
+            updated_at
+        """,
+        conversation_id,
+        title,
+    )
+
+    return None if row is None else dict(row)

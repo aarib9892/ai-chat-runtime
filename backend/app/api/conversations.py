@@ -8,6 +8,7 @@ from app.repositories.conversation_repository import (
     get_conversation,
     touch_conversation,
     list_conversations,
+    update_conversation_title,
 )
 
 from app.repositories.message_repository import (
@@ -20,6 +21,18 @@ from app.services.context_service import build_context
 from app.services.llm_service import stream_llm
 
 router = APIRouter()
+
+
+def build_conversation_title(
+    message: str,
+    max_length: int = 60,
+) -> str:
+    title = " ".join(message.split())
+
+    if len(title) <= max_length:
+        return title
+
+    return title[: max_length - 3].rstrip() + "..."
 
 
 @router.post("/conversations")
@@ -60,6 +73,11 @@ async def ask_conversation(conversation_id: UUID, payload: AskRequest):
         raise HTTPException(
             status_code=404,
             detail="Conversation Not Found",
+        )
+    if not conversation["title"]:
+        await update_conversation_title(
+            conversation_id,
+            build_conversation_title(payload.message),
         )
 
     await create_message(
