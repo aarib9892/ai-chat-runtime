@@ -171,6 +171,14 @@ export function useChat() {
 
       for await (const event of readNdjsonStream<StreamEvent>(response.body)) {
         switch (event.type) {
+          case "message_ids":
+            dispatch({
+              type: "messages/persisted",
+              userMessageId: event.user_message_id,
+              assistantMessageId: event.assistant_message_id,
+            });
+
+            break;
           case "delta":
             dispatch({
               type: "stream/delta",

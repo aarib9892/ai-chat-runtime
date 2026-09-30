@@ -10,13 +10,6 @@ from app.api.chat import router as chat_router
 from app.api.conversations import router as converstions_router
 
 
-# curl -N \
-#   -X POST \
-#   http://127.0.0.1:8000/api/conversations/a7295f53-88c9-4b94-acf4-ac80f18e340f/ask \
-#   -H "Content-Type: application/json" \
-#   -d '{
-#     "message": "My name is Raj."
-#   }'
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()

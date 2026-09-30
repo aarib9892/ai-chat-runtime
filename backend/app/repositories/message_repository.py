@@ -1,7 +1,7 @@
 # app/repositories/message_repository.py
 
 from uuid import UUID
-
+import asyncpg
 from app.db.database import get_pool
 
 
@@ -11,10 +11,11 @@ async def create_message(
     content: str,
     status: str = "completed",
     provider_response_id: str | None = None,
+    connection: asyncpg.Connection | None = None,
 ):
-    pool = get_pool()
+    db = connection or get_pool()
 
-    row = await pool.fetchrow(
+    row = await db.fetchrow(
         """
         INSERT INTO messages (
             conversation_id,
@@ -73,10 +74,11 @@ async def update_message(
     content: str,
     status: str,
     provider_response_id: str | None = None,
+    connection: asyncpg.Connection | None = None,
 ):
-    pool = get_pool()
+    db = connection or get_pool()
 
-    row = await pool.fetchrow(
+    row = await db.fetchrow(
         """
         UPDATE messages
         SET

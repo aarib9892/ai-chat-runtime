@@ -15,7 +15,8 @@ AI Chat Runtime is a full-stack chat application with persisted conversations an
 ```text
 ai-chat-runtime/
 ├── backend/
-│   ├── app/                 # FastAPI application and uv project
+│   ├── app/                 # FastAPI application
+│   ├── pyproject.toml       # Backend dependency manifest
 │   └── migrations/          # PostgreSQL schema
 └── frontend/
     └── react-frontend/      # Vite + React client
@@ -50,7 +51,7 @@ ai-chat-runtime/
 
    ```bash
    cd backend
-   uv run --project app --with asyncpg --with openai \
+   uv run --with asyncpg --with openai \
      fastapi dev app/main.py
    ```
 
@@ -68,7 +69,7 @@ ai-chat-runtime/
 
 ### Backend dependency note
 
-`backend/app/pyproject.toml` currently declares FastAPI. The application source also imports `asyncpg` and `openai`, so the startup command installs those two packages for the run without altering the project files. Python-dotenv is provided through the existing `fastapi[standard]` dependency.
+`backend/pyproject.toml` declares the backend project and its token-counting dependency. The application source also imports `asyncpg` and `openai`, so the startup command installs those two packages for the run without altering the project files. Python-dotenv is provided through the existing `fastapi[standard]` dependency.
 
 ## Environment variables
 

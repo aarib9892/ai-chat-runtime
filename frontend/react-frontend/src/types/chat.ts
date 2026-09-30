@@ -8,6 +8,11 @@ export type Message = {
 };
 export type StreamEvent =
   | {
+      type: "message_ids";
+      user_message_id: string;
+      assistant_message_id: string;
+    }
+  | {
       type: "delta";
       delta: string;
     }

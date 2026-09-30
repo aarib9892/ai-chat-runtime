@@ -1,5 +1,5 @@
 from uuid import UUID
-
+from app.db.database import get_pool
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -74,31 +74,41 @@ async def ask_conversation(conversation_id: UUID, payload: AskRequest):
             status_code=404,
             detail="Conversation Not Found",
         )
-    if not conversation["title"]:
-        await update_conversation_title(
-            conversation_id,
-            build_conversation_title(payload.message),
-        )
 
-    await create_message(
-        conversation_id=conversation_id,
-        role="user",
-        content=payload.message,
-        status="completed",
-    )
-    await touch_conversation(conversation_id)
+    pool = get_pool()
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+
+            user_message = await create_message(
+                conversation_id=conversation_id,
+                role="user",
+                content=payload.message,
+                status="completed",
+                connection=connection,
+            )
+            assistant_message = await create_message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content="",
+                status="streaming",
+                connection=connection,
+            )
+            if not conversation["title"]:
+                await update_conversation_title(
+                    conversation_id,
+                    build_conversation_title(payload.message),
+                    connection=connection,
+                )
+
+            await touch_conversation(conversation_id, connection=connection)
     messages = await get_messages(conversation_id)
 
-    context = build_context(messages)
-    assistant_message = await create_message(
-        conversation_id=conversation_id,
-        role="assistant",
-        content="",
-        status="streaming",
-    )
+    context = build_context(messages, current_message_id=user_message["id"])
+
     return StreamingResponse(
         stream_llm(
             context=context,
+            user_message_id=user_message["id"],
             assistant_message_id=assistant_message["id"],
             conversation_id=conversation_id,
         ),

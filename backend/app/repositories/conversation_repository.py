@@ -1,7 +1,7 @@
 # app/repositories/conversation_repository.py
 
 from uuid import UUID
-
+import asyncpg
 from app.db.database import get_pool
 
 
@@ -51,11 +51,11 @@ async def get_conversation(
 
 
 async def touch_conversation(
-    conversation_id: UUID,
+    conversation_id: UUID, connection: asyncpg.Connection | None = None
 ):
-    pool = get_pool()
+    db = connection or get_pool()
 
-    await pool.execute(
+    await db.execute(
         """
         UPDATE conversations
         SET updated_at = NOW()
@@ -96,15 +96,15 @@ async def list_conversations(
 async def update_conversation_title(
     conversation_id: UUID,
     title: str,
+    connection: asyncpg.Connection | None = None,
 ):
-    pool = get_pool()
+    db = connection or get_pool()
 
-    row = await pool.fetchrow(
+    row = await db.fetchrow(
         """
         UPDATE conversations
         SET
-            title = $2,
-            updated_at = NOW()
+            title = $2
         WHERE id = $1
         RETURNING
             id,

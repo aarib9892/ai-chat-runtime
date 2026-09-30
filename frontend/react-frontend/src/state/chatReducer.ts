@@ -67,6 +67,11 @@ export type ChatAction =
     }
   | {
       type: "chat/reset";
+    }
+  | {
+      type: "messages/persisted";
+      userMessageId: string;
+      assistantMessageId: string;
     };
 
 function updateLastAssistant(
@@ -88,6 +93,45 @@ function updateLastAssistant(
   }
 
   updated[lastIndex] = updater(lastMessage);
+
+  return updated;
+}
+
+function attachPersistedMessageIds(
+  messages: Message[],
+  userMessageId: string,
+  assistantMessageId: string,
+): Message[] {
+  const updated = [...messages];
+
+  const assistantIndex = updated.findLastIndex(
+    (message) => message.role === "assistant" && message.status === "streaming",
+  );
+
+  if (assistantIndex === -1) {
+    return messages;
+  }
+
+  let userIndex = -1;
+
+  for (let index = assistantIndex - 1; index >= 0; index--) {
+    if (updated[index].role === "user") {
+      userIndex = index;
+      break;
+    }
+  }
+
+  if (userIndex !== -1) {
+    updated[userIndex] = {
+      ...updated[userIndex],
+      id: userMessageId,
+    };
+  }
+
+  updated[assistantIndex] = {
+    ...updated[assistantIndex],
+    id: assistantMessageId,
+  };
 
   return updated;
 }
@@ -210,6 +254,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         streamStatus: "idle",
 
         error: null,
+      };
+
+    case "messages/persisted":
+      return {
+        ...state,
+
+        messages: attachPersistedMessageIds(
+          state.messages,
+          action.userMessageId,
+          action.assistantMessageId,
+        ),
       };
 
     default:
