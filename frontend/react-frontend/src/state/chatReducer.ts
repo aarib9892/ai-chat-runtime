@@ -72,6 +72,10 @@ export type ChatAction =
       type: "messages/persisted";
       userMessageId: string;
       assistantMessageId: string;
+    }
+  | {
+      type: "stream/incomplete";
+      reason: string;
     };
 
 function updateLastAssistant(
@@ -265,6 +269,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           action.userMessageId,
           action.assistantMessageId,
         ),
+      };
+    case "stream/incomplete":
+      return {
+        ...state,
+
+        streamStatus: "idle",
+
+        messages: updateLastAssistant(state.messages, (message) => ({
+          ...message,
+          status: "incomplete",
+        })),
+
+        error:
+          action.reason === "max_tokens"
+            ? "The response reached the maximum output length."
+            : "The response ended before completion.",
       };
 
     default:

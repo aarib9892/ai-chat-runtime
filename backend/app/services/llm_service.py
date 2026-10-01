@@ -63,9 +63,9 @@ async def stream_llm(
         )
 
         async for event in stream:
-            print("\n----------------")
-            print("EVENT TYPE:", event.type)
-            print(event)
+            # print("\n----------------")
+            # print("EVENT TYPE:", event.type)
+            # print(event)
             if event.type == "response.output_text.delta":
                 full_response += event.delta
                 yield json.dumps({"type": "delta", "delta": event.delta}) + "\n"
@@ -127,6 +127,29 @@ async def stream_llm(
                         usage.total_tokens,
                     )
                 yield json.dumps({"type": "done"}) + "\n"
+
+            elif event.type == "response.incomplete":
+                reason = "unknown"
+
+                if event.response.incomplete_details:
+                    reason = event.response.incomplete_details.reason
+
+                await persist_assistant_result(
+                    assistant_message_id=assistant_message_id,
+                    conversation_id=conversation_id,
+                    content=full_response,
+                    status="incomplete",
+                    provider_response_id=provider_response_id,
+                )
+
+                yield json.dumps(
+                    {
+                        "type": "incomplete",
+                        "reason": reason,
+                    }
+                ) + "\n"
+
+                return
 
             elif event.type == "response.failed":
                 raise RuntimeError("OpenAI response failed")

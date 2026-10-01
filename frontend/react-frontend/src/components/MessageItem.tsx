@@ -16,6 +16,10 @@ export function MessageItem({ message }: Props) {
       {message.status === "stopped" && <small>Stopped</small>}
 
       {message.status === "error" && <small>Generation failed</small>}
+
+      {message.status === "incomplete" && (
+        <small>Response ended before completion.</small>
+      )}
     </div>
   );
 }

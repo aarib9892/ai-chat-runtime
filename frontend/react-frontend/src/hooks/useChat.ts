@@ -194,6 +194,14 @@ export function useChat() {
 
             break;
 
+          case "incomplete":
+            dispatch({
+              type: "stream/incomplete",
+              reason: event.reason,
+            });
+
+            return;
+
           case "error":
             dispatch({
               type: "stream/error",

@@ -1,4 +1,9 @@
-type MessageStatus = "streaming" | "completed" | "stopped" | "error";
+type MessageStatus =
+  | "streaming"
+  | "completed"
+  | "stopped"
+  | "error"
+  | "incomplete";
 
 export type Message = {
   id?: string;
@@ -15,6 +20,10 @@ export type StreamEvent =
   | {
       type: "delta";
       delta: string;
+    }
+  | {
+      type: "incomplete";
+      reason: string;
     }
   | {
       type: "done";

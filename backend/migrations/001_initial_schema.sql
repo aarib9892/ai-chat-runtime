@@ -26,7 +26,8 @@ CREATE TABLE MESSAGES(
                 'streaming',
                 'completed',
                 'stopped',
-                'error'
+                'error',
+                'incomplete'
             )
         ),
     

@@ -9,7 +9,7 @@ SAFETY_MARGIN_TOKENS = 200
 
 
 def build_context(
-    messages: list[dict], current_message_id: UUID
+    messages: list[dict], current_message_id: UUID, summary: dict | None = None
 ) -> list[dict[str, str]]:
     usable_messages = [
         message
@@ -28,14 +28,39 @@ def build_context(
         "content": current_message["content"],
     }
     current_message_tokens = count_message_tokens(current_context_message)
-    if current_message_tokens > (
-        MAX_INPUT_TOKENS - RESERVED_SYSTEM_TOKENS - SAFETY_MARGIN_TOKENS
-    ):
-        raise ValueError("Current message exceeds the input token budget")
-    history_budget = PLANNING_INPUT_BUDGET - current_message_tokens
+
+    summary_message_tokens = 0
+    summary_context_message = None
+    if summary:
+        summary_context_message = {
+            "role": "assistant",
+            "content": (
+                "Conversation summary from earlier turns:\n\n" + summary["summary"]
+            ),
+        }
+        summary_message_tokens = count_message_tokens(summary_context_message)
+
+        boundary_index = None
+        for index, message in enumerate(usable_messages):
+            if message["id"] == summary["through_message_id"]:
+                boundary_index = index
+        if boundary_index is None:
+            raise ValueError("Summary boundary message not found")
+        historical_messages = usable_messages[boundary_index + 1 :]
+    else:
+        historical_messages = usable_messages
+
     historical_messages = [
-        message for message in usable_messages if message["id"] != current_message_id
+        message
+        for message in historical_messages
+        if (message["id"] != current_message_id)
     ]
+
+    mandatory_tokens = current_message_tokens + summary_message_tokens
+    if mandatory_tokens > PLANNING_INPUT_BUDGET:
+        raise ValueError("Current input and summary exceed token budget")
+
+    history_budget = PLANNING_INPUT_BUDGET - mandatory_tokens
 
     selected_history: list[dict[str, str]] = []
     history_tokens = 0
@@ -48,35 +73,39 @@ def build_context(
             selected_history.append(context_message)
             history_tokens += message_tokens
     selected_history.reverse()
-    context = [*selected_history, current_context_message]
+
+    context = [
+        *([summary_context_message] if summary_context_message else []),
+        *selected_history,
+        current_context_message,
+    ]
     print("=== CONTEXT BUILD ===")
     print(
-        "Selected history messages:",
+        "Summary included:",
+        summary is not None,
+    )
+    print(
+        "Summary tokens:",
+        summary_message_tokens,
+    )
+    print(
+        "Unsummarized raw messages:",
+        len(historical_messages),
+    )
+    print(
+        "Selected raw history:",
         len(selected_history),
     )
-
     print(
-        "History tokens:",
+        "Raw history tokens:",
         history_tokens,
     )
-
-    print(
-        "Total selected tokens:",
-        count_context_tokens(context),
-    )
-
-    print(
-        "Available messages:",
-        len(usable_messages),
-    )
-
     print(
         "Current message tokens:",
         current_message_tokens,
     )
-
     print(
-        "History budget:",
-        max(history_budget, 0),
+        "Total selected tokens:",
+        count_context_tokens(context),
     )
     return context

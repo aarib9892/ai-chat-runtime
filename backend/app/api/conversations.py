@@ -16,9 +16,19 @@ from app.repositories.message_repository import (
     get_messages,
 )
 
+from app.repositories.summary_repository import (
+    get_conversation_summary,
+    update_conversation_summary,
+)
 from app.schemas.conversation import ConversationCreate, MessageCreate, AskRequest
 from app.services.context_service import build_context
 from app.services.llm_service import stream_llm
+from app.services.summary_service import (
+    SUMMARY_TRIGGER_TOKENS,
+    generate_updated_summary,
+    plan_summary_update,
+)
+from app.services.token_service import count_text_tokens
 
 router = APIRouter()
 
@@ -102,8 +112,90 @@ async def ask_conversation(conversation_id: UUID, payload: AskRequest):
 
             await touch_conversation(conversation_id, connection=connection)
     messages = await get_messages(conversation_id)
+    summary = await get_conversation_summary(conversation_id)
+    summary_plan = plan_summary_update(
+        messages=messages,
+        summary=summary,
+        current_message_id=user_message["id"],
+    )
+    print("=== SUMMARY PLAN DEBUG ===")
+    print("Summary exists:", summary is not None)
 
-    context = build_context(messages, current_message_id=user_message["id"])
+    if summary:
+        print(
+            "Existing boundary:",
+            summary["through_message_id"],
+        )
+
+    print(
+        "Unsummarized tokens:",
+        summary_plan.unsummarized_tokens,
+    )
+
+    print(
+        "Trigger:",
+        SUMMARY_TRIGGER_TOKENS,
+    )
+
+    print(
+        "Should summarize:",
+        summary_plan.should_summarize,
+    )
+
+    print(
+        "Messages to summarize:",
+        len(summary_plan.messages_to_summarize),
+    )
+
+    print(
+        "Recent messages:",
+        len(summary_plan.recent_messages),
+    )
+    if summary_plan.should_summarize:
+        try:
+
+            existing_summary_text = summary["summary"] if summary else None
+            updated_summary = await generate_updated_summary(
+                existing_summary=existing_summary_text,
+                messages_to_summarize=summary_plan.messages_to_summarize,
+            )
+            summary_token_count = count_text_tokens(updated_summary)
+            summary = await update_conversation_summary(
+                conversation_id=conversation_id,
+                summary=updated_summary,
+                through_message_id=summary_plan.through_message_id,
+                token_count=summary_token_count,
+            )
+            print("=== SUMMARY UPDATE ===")
+
+            print(
+                "Messages summarized:",
+                len(summary_plan.messages_to_summarize),
+            )
+
+            print(
+                "Source tokens:",
+                summary_plan.summarize_tokens,
+            )
+
+            print(
+                "Summary tokens:",
+                summary["token_count"],
+            )
+
+            print(
+                "New boundary:",
+                summary["through_message_id"],
+            )
+        except Exception as error:
+            print(
+                "Summary update failed:",
+                repr(error),
+            )
+
+    context = build_context(
+        messages, current_message_id=user_message["id"], summary=summary
+    )
 
     return StreamingResponse(
         stream_llm(

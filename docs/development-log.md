@@ -24,3 +24,23 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 
 - Add focused backend tests for transaction rollback and token-budget boundary cases.
 - Repair or rename `AppChaining.ts` to unblock the full frontend lint/build check.
+
+## 2026-10-01 — Rolling conversation summaries and incomplete responses
+
+### Completed
+
+- Added a `conversation_summaries` store that records a compact summary, its message boundary, token count, and update time for each conversation.
+- Added a rolling-summary planner: after unsummarized completed history reaches the token trigger, it retains recent raw messages and replaces older turns with a concise OpenAI-generated summary.
+- Included the persisted summary in context construction while ensuring that contexts without a summary do not contain an empty placeholder.
+- Added the `incomplete` message state through the database migration, streaming service, stream-event types, reducer, and message UI. Responses ending because of an output limit now display a clear explanation.
+- Updated the composer’s stop handler to use its local click event and removed development-only console logging.
+
+### Validation
+
+- Backend compilation and uv lock validation passed.
+- Direct context-construction checks passed with and without a summary; summary-planning checks passed below and above the trigger threshold.
+- ESLint and a targeted TypeScript type check passed for the changed chat components, stream hook, reducer, and types.
+
+### Follow-up
+
+- Run migration tests against an existing database as well as a clean database before deploying.
