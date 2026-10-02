@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 
 from app.api.conversations import router as converstions_router
+from app.api.documents import router as documents_router
 
 
 @asynccontextmanager
@@ -43,5 +44,9 @@ async def root():
 app.include_router(chat_router, prefix="/api")
 app.include_router(
     converstions_router,
+    prefix="/api",
+)
+app.include_router(
+    documents_router,
     prefix="/api",
 )

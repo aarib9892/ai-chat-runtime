@@ -5,6 +5,7 @@ AI Chat Runtime is a full-stack chat application with persisted conversations an
 ## Features
 
 - Creates, restores, and lists PostgreSQL-backed conversations.
+- Stores source documents and provides a schema for their tokenized chunks.
 - Persists user messages and assistant response state (`streaming`, `completed`, `stopped`, or `error`).
 - Sends recent completed messages as context for each generation.
 - Streams response events to the browser as newline-delimited JSON (NDJSON).
@@ -39,13 +40,17 @@ ai-chat-runtime/
 
    Set `DATABASE_URL` to a PostgreSQL connection string and `OPENAI_API_KEY` to a valid API key. The local `.env` file is intentionally ignored by Git.
 
-2. Create the database and apply the schema. Adjust the connection string for your PostgreSQL installation if needed:
+2. Create the database and apply all migrations in order. Adjust the connection string for your PostgreSQL installation if needed:
 
    ```bash
    createdb ai_chat_runtime
-   psql "postgresql://postgres:postgres@localhost:5432/ai_chat_runtime" \
-     -f backend/migrations/001_initial_schema.sql
+   for migration in backend/migrations/*.sql; do
+     psql "postgresql://postgres:postgres@localhost:5432/ai_chat_runtime" \
+       -f "$migration"
+   done
    ```
+
+   For an existing database, apply only the migrations that have not already been run.
 
 3. Start the backend from the repository root:
 
@@ -89,6 +94,7 @@ All API routes are prefixed with `/api`.
 | `GET` | `/conversations/{conversation_id}` | Retrieve a conversation and its messages. |
 | `POST` | `/conversations/{conversation_id}/messages` | Add a persisted user or assistant message. |
 | `POST` | `/conversations/{conversation_id}/ask` | Save a user prompt and stream the assistant response as NDJSON. |
+| `POST` | `/documents` | Store a document’s filename, content, and optional MIME type. |
 
 The streaming route emits `delta` events while text arrives, then a `done` event. If generation fails, it emits an `error` event.
 

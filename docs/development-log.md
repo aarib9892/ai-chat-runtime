@@ -44,3 +44,21 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Run migration tests against an existing database as well as a clean database before deploying.
+
+## 2026-10-02 — Document ingestion foundation
+
+### Completed
+
+- Added `documents` storage with filename, content, MIME type, and creation time.
+- Added `document_chunks` storage, ordered per document and indexed for future chunking and retrieval workflows.
+- Added `POST /api/documents`, which validates document input and persists it through the document repository.
+- Registered the document router with the FastAPI application.
+- Updated setup instructions to apply every migration for new databases and documented the new API route.
+
+### Validation
+
+- Backend compilation, route-registration, document-schema, repository, and uv lock checks passed without needing a live database.
+
+### Follow-up
+
+- Add document retrieval, chunking, token counting, and search before using uploaded documents as model context.
