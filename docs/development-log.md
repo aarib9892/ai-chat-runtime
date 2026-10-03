@@ -62,3 +62,21 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Add document retrieval, chunking, token counting, and search before using uploaded documents as model context.
+
+## 2026-10-03 — Document chunking and semantic search
+
+### Completed
+
+- Added token-based document chunking with configurable chunk size and overlap.
+- Added OpenAI embedding generation using `text-embedding-3-small`, with dimension validation before persistence.
+- Added pgvector registration for database connections, vector columns, a cosine-similarity index, and repository operations for embedding updates and nearest-neighbor search.
+- Added chunk, embedding, and search API endpoints; search requests now require a non-empty query and a bounded result limit.
+- Removed development-only output from token and document-processing paths, and updated the API documentation.
+
+### Validation
+
+- Backend compilation, chunking edge cases, API route registration, repository query construction, embedding-shape validation, and uv lock validation passed without requiring a live database or OpenAI request.
+
+### Follow-up
+
+- Add authenticated document ownership and batch large embedding requests before exposing ingestion to untrusted clients.

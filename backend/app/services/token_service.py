@@ -19,4 +19,10 @@ def count_context_tokens(messages: list[dict]) -> int:
     return sum(count_message_tokens(message) for message in messages)
 
 
-print(count_text_tokens, "Hello how are")
+# Return the token IDs for a text string.
+def encode_text(text: str) -> list[int]:
+    return encoding.encode(text)
+
+
+def decode_tokens(tokens: list[int]) -> str:
+    return encoding.decode(tokens)

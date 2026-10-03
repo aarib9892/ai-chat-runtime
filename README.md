@@ -5,7 +5,7 @@ AI Chat Runtime is a full-stack chat application with persisted conversations an
 ## Features
 
 - Creates, restores, and lists PostgreSQL-backed conversations.
-- Stores source documents and provides a schema for their tokenized chunks.
+- Stores source documents, creates token-overlapped chunks, and supports vector similarity search.
 - Persists user messages and assistant response state (`streaming`, `completed`, `stopped`, or `error`).
 - Sends recent completed messages as context for each generation.
 - Streams response events to the browser as newline-delimited JSON (NDJSON).
@@ -74,7 +74,7 @@ ai-chat-runtime/
 
 ### Backend dependency note
 
-`backend/pyproject.toml` declares the backend project and its token-counting dependency. The application source also imports `asyncpg` and `openai`, so the startup command installs those two packages for the run without altering the project files. Python-dotenv is provided through the existing `fastapi[standard]` dependency.
+`backend/pyproject.toml` declares the backend project, token counting, and PostgreSQL vector support. The application source also imports `asyncpg` and `openai`, so the startup command installs those two packages for the run without altering the project files. Python-dotenv is provided through the existing `fastapi[standard]` dependency.
 
 ## Environment variables
 
@@ -95,6 +95,9 @@ All API routes are prefixed with `/api`.
 | `POST` | `/conversations/{conversation_id}/messages` | Add a persisted user or assistant message. |
 | `POST` | `/conversations/{conversation_id}/ask` | Save a user prompt and stream the assistant response as NDJSON. |
 | `POST` | `/documents` | Store a document’s filename, content, and optional MIME type. |
+| `POST` | `/documents/{document_id}/chunks` | Replace a document’s chunks using a token-overlapped split. |
+| `POST` | `/documents/{document_id}/embeddings` | Generate and persist embeddings for all document chunks. |
+| `POST` | `/documents/search` | Return the most similar embedded chunks for a search query. |
 
 The streaming route emits `delta` events while text arrives, then a `done` event. If generation fails, it emits an `error` event.
 
