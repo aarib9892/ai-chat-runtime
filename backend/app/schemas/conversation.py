@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 from pydantic import BaseModel
 
 
@@ -13,3 +14,4 @@ class MessageCreate(BaseModel):
 
 class AskRequest(BaseModel):
     message: str
+    document_id: UUID | None = None

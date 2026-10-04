@@ -179,32 +179,136 @@ async def update_chunk_embeddings(
 async def search_document_chunks(
     query_embedding: list[float],
     limit: int = 5,
+    document_id: UUID | None = None,
+):
+    pool = get_pool()
+    if document_id is not None:
+
+        rows = await pool.fetch(
+            """
+            SELECT
+                dc.id,
+                dc.document_id,
+                dc.chunk_index,
+                d.filename,
+                dc.content,
+                dc.token_count,
+                1 - (dc.embedding <=> $1) AS similarity
+
+            FROM document_chunks dc
+            JOIN documents d
+                ON d.id = dc.document_id
+
+            WHERE dc.embedding IS NOT NULL
+            AND dc.embedding_model = $2
+            AND dc.document_id = $3
+
+            ORDER BY dc.embedding <=> $1
+
+            LIMIT $4
+            """,
+            Vector(query_embedding),
+            EMBEDDING_MODEL,
+            document_id,
+            limit,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT
+                dc.id,
+                dc.document_id,
+                dc.chunk_index,
+                d.filename,
+                dc.content,
+                dc.token_count,
+                1 - (dc.embedding <=> $1) AS similarity
+
+            FROM document_chunks dc
+            JOIN documents d
+                ON d.id = dc.document_id
+
+            WHERE dc.embedding IS NOT NULL
+            AND dc.embedding_model = $2
+
+            ORDER BY dc.embedding <=> $1
+
+            LIMIT $3
+            """,
+            Vector(query_embedding),
+            EMBEDDING_MODEL,
+            limit,
+        )
+
+    return [dict(row) for row in rows]
+
+
+async def create_message_sources(
+    message_id: UUID,
+    chunks,
+):
+    if not chunks:
+        return
+
+    pool = get_pool()
+
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            for rank, chunk in enumerate(
+                chunks,
+                start=1,
+            ):
+                await connection.execute(
+                    """
+                    INSERT INTO message_sources (
+                        message_id,
+                        chunk_id,
+                        rank,
+                        similarity
+                    )
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (
+                        message_id,
+                        chunk_id
+                    )
+                    DO UPDATE SET
+                        rank = EXCLUDED.rank,
+                        similarity = EXCLUDED.similarity
+                    """,
+                    message_id,
+                    chunk.id,
+                    rank,
+                    chunk.similarity,
+                )
+
+
+async def get_message_sources(
+    message_id: UUID,
 ):
     pool = get_pool()
 
     rows = await pool.fetch(
         """
         SELECT
-            id,
-            document_id,
-            chunk_index,
-            content,
-            token_count,
+            dc.document_id AS "documentId",
+            d.filename,
+            dc.chunk_index AS "chunkIndex",
+            ms.rank,
+            ms.similarity
 
-            embedding <=> $1 AS distance,
+        FROM message_sources ms
 
-            1 - (embedding <=> $1) AS similarity
+        JOIN document_chunks dc
+            ON dc.id = ms.chunk_id
 
-        FROM document_chunks
+        JOIN documents d
+            ON d.id = dc.document_id
 
-        WHERE embedding IS NOT NULL
+        WHERE ms.message_id = $1
 
-        ORDER BY embedding <=> $1
-
-        LIMIT $2
+        ORDER BY ms.rank ASC
         """,
-        Vector(query_embedding),
-        limit,
+        message_id,
     )
 
     return [dict(row) for row in rows]

@@ -17,7 +17,6 @@ export function ChatComposer({ isStreaming, onSend, onStop }: Props) {
     if (!input) {
       return;
     }
-
     await onSend(input);
 
     if (queryRef.current) {

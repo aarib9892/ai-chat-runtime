@@ -9,8 +9,15 @@ SAFETY_MARGIN_TOKENS = 200
 
 
 def build_context(
-    messages: list[dict], current_message_id: UUID, summary: dict | None = None
+    messages: list[dict],
+    current_message_id: UUID,
+    summary: dict | None = None,
+    rag_message: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
+    rag_tokens = 0
+
+    if rag_message is not None:
+        rag_tokens = count_message_tokens(rag_message)
     usable_messages = [
         message
         for message in messages
@@ -56,9 +63,9 @@ def build_context(
         if (message["id"] != current_message_id)
     ]
 
-    mandatory_tokens = current_message_tokens + summary_message_tokens
+    mandatory_tokens = current_message_tokens + summary_message_tokens + rag_tokens
     if mandatory_tokens > PLANNING_INPUT_BUDGET:
-        raise ValueError("Current input and summary exceed token budget")
+        raise ValueError("Current input, summary, and retrieval context exceed token budget")
 
     history_budget = PLANNING_INPUT_BUDGET - mandatory_tokens
 
@@ -77,9 +84,19 @@ def build_context(
     context = [
         *([summary_context_message] if summary_context_message else []),
         *selected_history,
-        current_context_message,
     ]
+    if rag_message is not None:
+        context.append(rag_message)
+    context.append(current_context_message)
     print("=== CONTEXT BUILD ===")
+    print(
+        "RAG included:",
+        rag_message is not None,
+    )
+    print(
+        "RAG tokens:",
+        rag_tokens,
+    )
     print(
         "Summary included:",
         summary is not None,

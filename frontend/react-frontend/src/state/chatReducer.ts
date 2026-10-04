@@ -2,6 +2,7 @@ import type {
   Conversation,
   ConversationWithMessages,
   Message,
+  MessageSource,
 } from "../types/chat";
 
 export type ChatState = {
@@ -44,6 +45,10 @@ export type ChatAction =
   | {
       type: "message/userAdded";
       message: Message;
+    }
+  | {
+      type: "stream/sourcesReceived";
+      sources: MessageSource[];
     }
   | {
       type: "stream/started";
@@ -285,6 +290,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           action.reason === "max_tokens"
             ? "The response reached the maximum output length."
             : "The response ended before completion.",
+      };
+    case "stream/sourcesReceived":
+      return {
+        ...state,
+        messages: updateLastAssistant(state.messages, (message) => ({
+          ...message,
+          sources: action.sources,
+        })),
       };
 
     default:

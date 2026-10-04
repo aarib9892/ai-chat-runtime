@@ -12,14 +12,13 @@ from app.repositories.document_repository import (
     get_document,
     get_document_chunks,
     replace_document_chunks,
-    search_document_chunks,
     update_chunk_embeddings,
 )
 from app.services.chunking_service import chunk_text
 from app.services.embedding_service import (
-    embed_text,
     embed_texts,
 )
+from app.services.retrieval_service import build_retrieval_context, retrieve_chunks
 
 router = APIRouter()
 
@@ -97,14 +96,26 @@ async def embed_document_endpoint(
 async def search_documents(
     payload: DocumentSearchRequest,
 ):
-    query_embedding = await embed_text(payload.query)
-
-    results = await search_document_chunks(
-        query_embedding=query_embedding,
-        limit=payload.limit,
+    results = await retrieve_chunks(
+        query=payload.query,
+        document_id=payload.document_id,
+        top_k=payload.limit,
     )
+    context = build_retrieval_context(results)
 
     return {
         "query": payload.query,
-        "results": results,
+        "results": [
+            {
+                "id": result.id,
+                "document_id": result.document_id,
+                "filename": result.filename,
+                "chunk_index": result.chunk_index,
+                "content": result.content,
+                "token_count": result.token_count,
+                "similarity": result.similarity,
+            }
+            for result in results
+        ],
+        "context": context,
     }

@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 from app.db.database import get_pool
 from fastapi import APIRouter, HTTPException
@@ -11,6 +12,10 @@ from app.repositories.conversation_repository import (
     update_conversation_title,
 )
 
+from app.repositories.document_repository import (
+    create_message_sources,
+    get_message_sources,
+)
 from app.repositories.message_repository import (
     create_message,
     get_messages,
@@ -23,6 +28,7 @@ from app.repositories.summary_repository import (
 from app.schemas.conversation import ConversationCreate, MessageCreate, AskRequest
 from app.services.context_service import build_context
 from app.services.llm_service import stream_llm
+from app.services.retrieval_service import build_rag_message, retrieve_chunks
 from app.services.summary_service import (
     SUMMARY_TRIGGER_TOKENS,
     generate_updated_summary,
@@ -73,6 +79,14 @@ async def get_conversation_endpoint(conversation_id: UUID):
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation Not Found")
     messages = await get_messages(conversation_id)
+    assistant_messages = [
+        message for message in messages if message["role"] == "assistant"
+    ]
+    sources_by_message = await asyncio.gather(
+        *(get_message_sources(message["id"]) for message in assistant_messages)
+    )
+    for message, sources in zip(assistant_messages, sources_by_message):
+        message["sources"] = sources
     return {**conversation, "messages": messages}
 
 
@@ -192,9 +206,28 @@ async def ask_conversation(conversation_id: UUID, payload: AskRequest):
                 "Summary update failed:",
                 repr(error),
             )
+    retrieved_chunks = []
+    rag_message = None
+
+    if payload.document_id is not None:
+        retrieved_chunks = await retrieve_chunks(
+            query=payload.message,
+            document_id=payload.document_id,
+            top_k=3,
+        )
+        if retrieved_chunks:
+            await create_message_sources(
+                message_id=assistant_message["id"],
+                chunks=retrieved_chunks,
+            )
+
+        rag_message = build_rag_message(retrieved_chunks)
 
     context = build_context(
-        messages, current_message_id=user_message["id"], summary=summary
+        messages,
+        current_message_id=user_message["id"],
+        summary=summary,
+        rag_message=rag_message,
     )
 
     return StreamingResponse(
@@ -203,6 +236,7 @@ async def ask_conversation(conversation_id: UUID, payload: AskRequest):
             user_message_id=user_message["id"],
             assistant_message_id=assistant_message["id"],
             conversation_id=conversation_id,
+            retrieved_chunks=retrieved_chunks,
         ),
         media_type="application/x-ndjson",
     )

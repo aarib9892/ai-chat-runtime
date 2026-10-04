@@ -4,18 +4,35 @@ type MessageStatus =
   | "stopped"
   | "error"
   | "incomplete";
-
+export type MessageSource = {
+  documentId: string;
+  filename: string;
+  chunkIndex: number;
+  similarity: number;
+};
 export type Message = {
   id?: string;
   role: "user" | "assistant";
   content: string;
   status?: MessageStatus;
+  sources?: MessageSource[];
+};
+
+type RetrievalSource = {
+  document_id: string;
+  filename: string;
+  chunk_index: number;
+  similarity: number;
 };
 export type StreamEvent =
   | {
       type: "message_ids";
       user_message_id: string;
       assistant_message_id: string;
+    }
+  | {
+      type: "sources";
+      sources: RetrievalSource[];
     }
   | {
       type: "delta";

@@ -80,3 +80,21 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Add authenticated document ownership and batch large embedding requests before exposing ingestion to untrusted clients.
+
+## 2026-10-04 — Grounded conversation retrieval
+
+### Completed
+
+- Added optional document-scoped retrieval to conversation requests, with retrieved chunks inserted as developer-level reference material before the current user message.
+- Added persisted message-source citations with rank and similarity, plus source events for streamed responses and source display in the chat UI.
+- Added document filters to semantic search and bounded retrieval result counts.
+- Parallelized source loading for restored assistant messages and aligned persisted source fields with the client model.
+- Added the missing `message_sources` migration and removed the development-only hard-coded document ID from the composer.
+
+### Validation
+
+- Backend compilation, retrieval/context construction, migration structure, endpoint schema, repository query construction, and targeted frontend lint/type checks passed without a live database or OpenAI request.
+
+### Follow-up
+
+- Add a document picker to the chat UI so users can intentionally select the document used for a grounded reply.

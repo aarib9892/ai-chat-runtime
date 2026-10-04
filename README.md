@@ -6,6 +6,7 @@ AI Chat Runtime is a full-stack chat application with persisted conversations an
 
 - Creates, restores, and lists PostgreSQL-backed conversations.
 - Stores source documents, creates token-overlapped chunks, and supports vector similarity search.
+- Uses selected document chunks as grounded reference material and displays their sources with assistant responses.
 - Persists user messages and assistant response state (`streaming`, `completed`, `stopped`, or `error`).
 - Sends recent completed messages as context for each generation.
 - Streams response events to the browser as newline-delimited JSON (NDJSON).
@@ -93,7 +94,7 @@ All API routes are prefixed with `/api`.
 | `GET` | `/conversations` | List up to 50 conversations, newest activity first. |
 | `GET` | `/conversations/{conversation_id}` | Retrieve a conversation and its messages. |
 | `POST` | `/conversations/{conversation_id}/messages` | Add a persisted user or assistant message. |
-| `POST` | `/conversations/{conversation_id}/ask` | Save a user prompt and stream the assistant response as NDJSON. |
+| `POST` | `/conversations/{conversation_id}/ask` | Save a user prompt and stream the assistant response as NDJSON; accepts an optional `document_id` for grounded retrieval. |
 | `POST` | `/documents` | Store a document’s filename, content, and optional MIME type. |
 | `POST` | `/documents/{document_id}/chunks` | Replace a document’s chunks using a token-overlapped split. |
 | `POST` | `/documents/{document_id}/embeddings` | Generate and persist embeddings for all document chunks. |

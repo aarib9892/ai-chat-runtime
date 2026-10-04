@@ -20,6 +20,26 @@ export function MessageItem({ message }: Props) {
       {message.status === "incomplete" && (
         <small>Response ended before completion.</small>
       )}
+
+      {message.role === "assistant" &&
+        message.sources &&
+        message.sources.length > 0 && (
+          <div>
+            <strong>Sources</strong>
+
+            <ul>
+              {message.sources.map((source) => (
+                <li key={`${source.documentId}-${source.chunkIndex}`}>
+                  {source.filename}
+                  {" — "}
+                  chunk {source.chunkIndex}
+                  {" — "}
+                  similarity {source.similarity.toFixed(3)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
     </div>
   );
 }

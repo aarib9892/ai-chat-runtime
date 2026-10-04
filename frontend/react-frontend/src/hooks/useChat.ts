@@ -140,6 +140,7 @@ export function useChat() {
     conversationId: string,
     message: string,
     isNewConversation = false,
+    documentId: string | null = null,
   ) {
     controllerRef.current?.abort();
 
@@ -156,6 +157,7 @@ export function useChat() {
         conversationId,
         message,
         controller.signal,
+        documentId,
       );
 
       if (!response.ok) {
@@ -209,6 +211,19 @@ export function useChat() {
             });
 
             return;
+          case "sources": {
+            dispatch({
+              type: "stream/sourcesReceived",
+              sources: event.sources.map((source) => ({
+                documentId: source.document_id,
+                filename: source.filename,
+                chunkIndex: source.chunk_index,
+                similarity: source.similarity,
+              })),
+            });
+
+            break;
+          }
         }
       }
     } catch (error) {
@@ -237,7 +252,7 @@ export function useChat() {
   // SEND USER MESSAGE
   // -------------------------
 
-  async function sendMessage(input: string) {
+  async function sendMessage(input: string, documentId?: string | null) {
     const message = input.trim();
 
     if (!message) {
@@ -267,7 +282,7 @@ export function useChat() {
         message: userMessage,
       });
 
-      await askLLM(conversationId, message, isNewConversation);
+      await askLLM(conversationId, message, isNewConversation, documentId);
     } catch (error) {
       console.error(error);
 

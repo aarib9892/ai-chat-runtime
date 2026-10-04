@@ -7,6 +7,7 @@ import json
 from app.repositories.message_repository import update_message
 from app.services.context_service import build_context
 from app.repositories.conversation_repository import touch_conversation
+from app.services.retrieval_service import RetrievedChunk
 from app.services.token_service import (
     count_context_tokens,
 )
@@ -41,6 +42,7 @@ async def stream_llm(
     user_message_id: UUID,
     assistant_message_id: UUID,
     conversation_id: UUID,
+    retrieved_chunks: list[RetrievedChunk] | None = None,
 ):
     # input_messages = [{"role": mssg.role, "content": mssg.content} for mssg in messages]
     full_response = ""
@@ -54,6 +56,21 @@ async def stream_llm(
                 "assistant_message_id": str(assistant_message_id),
             }
         ) + "\n"
+        if retrieved_chunks:
+            yield json.dumps(
+                {
+                    "type": "sources",
+                    "sources": [
+                        {
+                            "document_id": str(chunk.document_id),
+                            "filename": chunk.filename,
+                            "chunk_index": chunk.chunk_index,
+                            "similarity": chunk.similarity,
+                        }
+                        for chunk in retrieved_chunks
+                    ],
+                }
+            ) + "\n"
         stream = await client.responses.create(
             model=OPENAI_MODEL,
             input=context,

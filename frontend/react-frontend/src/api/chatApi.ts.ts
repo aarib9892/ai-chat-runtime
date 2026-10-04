@@ -21,6 +21,7 @@ export async function askMessageApi(
   conversation_id: string,
   message: string,
   signal: AbortSignal,
+  documentId?: string | null,
 ) {
   const response = await fetch(
     `${API_BASE_URL}/conversations/${conversation_id}/ask`,
@@ -33,6 +34,7 @@ export async function askMessageApi(
 
       body: JSON.stringify({
         message: message,
+        document_id: documentId,
       }),
 
       signal: signal,

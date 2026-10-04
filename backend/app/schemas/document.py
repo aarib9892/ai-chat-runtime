@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -9,4 +11,11 @@ class DocumentCreate(BaseModel):
 
 class DocumentSearchRequest(BaseModel):
     query: str = Field(min_length=1)
-    limit: int = Field(default=5, ge=1, le=50)
+
+    document_id: UUID | None = None
+
+    limit: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+    )
