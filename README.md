@@ -7,6 +7,7 @@ AI Chat Runtime is a full-stack chat application with persisted conversations an
 - Creates, restores, and lists PostgreSQL-backed conversations.
 - Stores source documents, creates token-overlapped chunks, and supports vector similarity search.
 - Uses selected document chunks as grounded reference material and displays their sources with assistant responses.
+- Returns a clear fallback when the selected document does not contain sufficiently relevant evidence.
 - Persists user messages and assistant response state (`streaming`, `completed`, `stopped`, or `error`).
 - Sends recent completed messages as context for each generation.
 - Streams response events to the browser as newline-delimited JSON (NDJSON).

@@ -27,7 +27,7 @@ from app.repositories.summary_repository import (
 )
 from app.schemas.conversation import ConversationCreate, MessageCreate, AskRequest
 from app.services.context_service import build_context
-from app.services.llm_service import stream_llm
+from app.services.llm_service import stream_llm, stream_static_response
 from app.services.retrieval_service import build_rag_message, retrieve_chunks
 from app.services.summary_service import (
     SUMMARY_TRIGGER_TOKENS,
@@ -37,6 +37,10 @@ from app.services.summary_service import (
 from app.services.token_service import count_text_tokens
 
 router = APIRouter()
+NO_RELEVANT_EVIDENCE_MESSAGE = (
+    "I couldn't find relevant information in the selected "
+    "document to answer that question."
+)
 
 
 def build_conversation_title(
@@ -215,11 +219,22 @@ async def ask_conversation(conversation_id: UUID, payload: AskRequest):
             document_id=payload.document_id,
             top_k=3,
         )
-        if retrieved_chunks:
-            await create_message_sources(
-                message_id=assistant_message["id"],
-                chunks=retrieved_chunks,
+
+        if not retrieved_chunks:
+            return StreamingResponse(
+                stream_static_response(
+                    text=NO_RELEVANT_EVIDENCE_MESSAGE,
+                    user_message_id=user_message["id"],
+                    assistant_message_id=assistant_message["id"],
+                    conversation_id=conversation_id,
+                ),
+                media_type="application/x-ndjson",
             )
+
+        await create_message_sources(
+            message_id=assistant_message["id"],
+            chunks=retrieved_chunks,
+        )
 
         rag_message = build_rag_message(retrieved_chunks)
 

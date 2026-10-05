@@ -213,3 +213,39 @@ async def stream_llm(
 
     finally:
         print("Stream Function Ended")
+
+
+async def stream_static_response(
+    text: str,
+    user_message_id: UUID,
+    assistant_message_id: UUID,
+    conversation_id: UUID,
+):
+    yield json.dumps(
+        {
+            "type": "message_ids",
+            "user_message_id": str(user_message_id),
+            "assistant_message_id": str(assistant_message_id),
+        }
+    ) + "\n"
+
+    await persist_assistant_result(
+        assistant_message_id=assistant_message_id,
+        conversation_id=conversation_id,
+        content=text,
+        status="completed",
+        provider_response_id=None,
+    )
+
+    yield json.dumps(
+        {
+            "type": "delta",
+            "delta": text,
+        }
+    ) + "\n"
+
+    yield json.dumps(
+        {
+            "type": "done",
+        }
+    ) + "\n"

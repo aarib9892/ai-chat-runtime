@@ -98,3 +98,21 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Add a document picker to the chat UI so users can intentionally select the document used for a grounded reply.
+
+## 2026-10-05 — Retrieval relevance guardrails and evaluation
+
+### Completed
+
+- Added a minimum cosine-similarity threshold so weak document matches are excluded from retrieval results.
+- Added a persisted, streamed fallback reply for document-scoped questions that have no qualifying evidence.
+- Added a reusable retrieval evaluation command that accepts the target document UUID rather than embedding a local fixture ID in source code.
+- Added evaluation instructions covering prerequisites, metrics, and the deliberate API/database side effects of an evaluation run.
+- Removed debug and obsolete commented output from the retrieval request and client send path.
+
+### Validation
+
+- Backend compilation, retrieval cutoff behavior, static-response stream events, evaluation CLI parsing, uv lock validation, and targeted frontend lint/type checks passed without a live database or OpenAI request.
+
+### Follow-up
+
+- Establish target Hit@1, Hit@3, and negative-rejection thresholds before automating the retrieval evaluation in CI.
