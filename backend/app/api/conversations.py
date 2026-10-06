@@ -1,4 +1,5 @@
 import asyncio
+import json
 from uuid import UUID
 from app.db.database import get_pool
 from fastapi import APIRouter, HTTPException
@@ -20,6 +21,7 @@ from app.repositories.message_repository import (
     create_message,
     get_messages,
 )
+from app.repositories.tool_call_repository import get_tool_calls_for_messages
 
 from app.repositories.summary_repository import (
     get_conversation_summary,
@@ -41,6 +43,16 @@ NO_RELEVANT_EVIDENCE_MESSAGE = (
     "I couldn't find relevant information in the selected "
     "document to answer that question."
 )
+
+
+def parse_json_value(value):
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        return json.loads(value)
+
+    return value
 
 
 def build_conversation_title(
@@ -78,20 +90,91 @@ async def create_conversation_message_endpoint(
 
 
 @router.get("/conversations/{conversation_id}")
-async def get_conversation_endpoint(conversation_id: UUID):
+async def get_conversation_endpoint(
+    conversation_id: UUID,
+):
     conversation = await get_conversation(conversation_id)
+
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation Not Found")
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation Not Found",
+        )
+
     messages = await get_messages(conversation_id)
+
     assistant_messages = [
         message for message in messages if message["role"] == "assistant"
     ]
+
+    assistant_message_ids = [message["id"] for message in assistant_messages]
+
+    # -----------------------------
+    # Load persisted tool calls
+    # -----------------------------
+
+    tool_call_rows = await get_tool_calls_for_messages(assistant_message_ids)
+
+    tool_calls_by_message = {}
+
+    for row in tool_call_rows:
+        message_id = row["message_id"]
+
+        tool_calls_by_message.setdefault(
+            message_id,
+            [],
+        ).append(
+            {
+                "call_id": row["call_id"],
+                "name": row["tool_name"],
+                "arguments": parse_json_value(row["arguments"]),
+                "result": parse_json_value(row["result"]),
+                "status": row["status"],
+                "error": row["error"],
+            }
+        )
+
+    # -----------------------------
+    # Load persisted RAG sources
+    # -----------------------------
+
     sources_by_message = await asyncio.gather(
         *(get_message_sources(message["id"]) for message in assistant_messages)
     )
-    for message, sources in zip(assistant_messages, sources_by_message):
-        message["sources"] = sources
-    return {**conversation, "messages": messages}
+
+    sources_map = {
+        message["id"]: sources
+        for message, sources in zip(
+            assistant_messages,
+            sources_by_message,
+        )
+    }
+
+    # -----------------------------
+    # Build API messages
+    # -----------------------------
+
+    response_messages = []
+
+    for message in messages:
+        message_data = dict(message)
+
+        message_data["sources"] = sources_map.get(
+            message["id"],
+            [],
+        )
+
+        message_data["tool_calls"] = tool_calls_by_message.get(
+            message["id"],
+            [],
+        )
+
+        response_messages.append(message_data)
+
+    return {
+        **conversation,
+        "messages": response_messages,
+    }
 
 
 @router.post("/conversations/{conversation_id}/ask")

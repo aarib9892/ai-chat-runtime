@@ -3,6 +3,7 @@ import type {
   ConversationWithMessages,
   Message,
   MessageSource,
+  MessageToolCall,
 } from "../types/chat";
 
 export type ChatState = {
@@ -77,6 +78,17 @@ export type ChatAction =
       type: "messages/persisted";
       userMessageId: string;
       assistantMessageId: string;
+    }
+  | {
+      type: "stream/toolCallStarted";
+      toolCall: MessageToolCall;
+    }
+  | {
+      type: "stream/toolCallCompleted";
+      callId: string;
+      result?: unknown;
+      status: Exclude<MessageToolCall["status"], "running">;
+      error?: string;
     }
   | {
       type: "stream/incomplete";
@@ -297,6 +309,35 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: updateLastAssistant(state.messages, (message) => ({
           ...message,
           sources: action.sources,
+        })),
+      };
+    case "stream/toolCallStarted":
+      return {
+        ...state,
+
+        messages: updateLastAssistant(state.messages, (message) => ({
+          ...message,
+          toolCalls: [...(message.toolCalls ?? []), action.toolCall],
+        })),
+      };
+    case "stream/toolCallCompleted":
+      return {
+        ...state,
+
+        messages: updateLastAssistant(state.messages, (message) => ({
+          ...message,
+          toolCalls: message.toolCalls?.map((toolCall) => {
+            if (toolCall.callId !== action.callId) {
+              return toolCall;
+            }
+
+            return {
+              ...toolCall,
+              status: action.status,
+              result: action.result,
+              error: action.error,
+            };
+          }),
         })),
       };
 

@@ -1,12 +1,19 @@
 import { useEffect, useReducer, useRef } from "react";
 
-import type { Conversation, Message, StreamEvent } from "../types/chat";
+import type {
+  BackendConversationWithMessages,
+  Conversation,
+  ConversationWithMessages,
+  Message,
+  StreamEvent,
+} from "../types/chat";
 
 import {
   askMessageApi,
   createConversationApi,
   loadConversationByIdApi,
   loadConversationsApi,
+  mapBackendMessage,
 } from "../api/chatApi.ts";
 
 import { readNdjsonStream } from "../stream/ndjsonstream.ts";
@@ -42,7 +49,17 @@ export function useChat() {
         throw new Error(`Failed to load conversation: ${response.status}`);
       }
 
-      const conversation = await response.json();
+      const backendConversation: BackendConversationWithMessages =
+        await response.json();
+
+      const conversation: ConversationWithMessages = {
+        id: backendConversation.id,
+        title: backendConversation.title,
+        created_at: backendConversation.created_at,
+        updated_at: backendConversation.updated_at,
+
+        messages: backendConversation.messages.map(mapBackendMessage),
+      };
 
       dispatch({
         type: "conversation/loaded",
@@ -203,6 +220,31 @@ export function useChat() {
             });
 
             return;
+          case "tool_call": {
+            dispatch({
+              type: "stream/toolCallStarted",
+
+              toolCall: {
+                callId: event.call_id,
+                name: event.name,
+                arguments: event.arguments,
+                status: "running",
+              },
+            });
+
+            break;
+          }
+          case "tool_result": {
+            dispatch({
+              type: "stream/toolCallCompleted",
+              callId: event.call_id,
+              result: event.result,
+              status: event.status,
+              error: event.error,
+            });
+
+            break;
+          }
 
           case "error":
             dispatch({

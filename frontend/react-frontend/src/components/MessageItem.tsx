@@ -40,6 +40,38 @@ export function MessageItem({ message }: Props) {
             </ul>
           </div>
         )}
+
+      {message.role === "assistant" &&
+        message.toolCalls &&
+        message.toolCalls.length > 0 && (
+          <div>
+            <strong>Tools</strong>
+
+            {message.toolCalls.map((toolCall) => (
+              <div key={toolCall.callId}>
+                <div>
+                  <strong>{toolCall.name}</strong>
+                </div>
+
+                <div>
+                  <small>
+                    {toolCall.status === "running" && "Running..."}
+                    {toolCall.status === "completed" && "Completed"}
+                    {toolCall.status === "error" && "Failed"}
+                  </small>
+                </div>
+
+                <pre>{JSON.stringify(toolCall.arguments, null, 2)}</pre>
+
+                {toolCall.status === "completed" && (
+                  <pre>{JSON.stringify(toolCall.result, null, 2)}</pre>
+                )}
+
+                {toolCall.status === "error" && <small>{toolCall.error}</small>}
+              </div>
+            ))}
+          </div>
+        )}
     </div>
   );
 }

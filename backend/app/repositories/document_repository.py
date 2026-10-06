@@ -290,9 +290,9 @@ async def get_message_sources(
     rows = await pool.fetch(
         """
         SELECT
-            dc.document_id AS "documentId",
+            dc.document_id,
             d.filename,
-            dc.chunk_index AS "chunkIndex",
+            dc.chunk_index,
             ms.rank,
             ms.similarity
 

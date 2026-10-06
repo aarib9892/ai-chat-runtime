@@ -1,6 +1,36 @@
+import type { BackendMessage, Message } from "../types/chat";
+
 const API_BASE_URL = "http://127.0.0.1:8000/api";
+
+export function mapBackendMessage(message: BackendMessage): Message {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status: message.status,
+
+    sources:
+      message.sources?.map((source) => ({
+        documentId: source.document_id,
+        filename: source.filename,
+        chunkIndex: source.chunk_index,
+        similarity: source.similarity,
+      })) ?? [],
+
+    toolCalls:
+      message.tool_calls?.map((toolCall) => ({
+        callId: toolCall.call_id,
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+        status: toolCall.status,
+        result: toolCall.result ?? undefined,
+        error: toolCall.error ?? undefined,
+      })) ?? [],
+  };
+}
 export async function loadConversationByIdApi(id: string) {
   const response = await fetch(`${API_BASE_URL}/conversations/${id}`);
+
   return response;
 }
 

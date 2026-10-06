@@ -116,3 +116,24 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Establish target Hit@1, Hit@3, and negative-rejection thresholds before automating the retrieval evaluation in CI.
+
+## 2026-10-06 — Persisted tool calling
+
+### Completed
+
+- Added strict OpenAI function definitions and an allow-listed registry for exact arithmetic and text-length tools.
+- Added a `message_tool_calls` migration and repository methods that persist running, completed, and failed calls alongside assistant messages.
+- Extended the streaming response flow to announce tool calls, execute the registered handler, stream the outcome, provide it to the model for a final answer, and preserve failures rather than leaving calls running.
+- Added restored-conversation tool-call data, typed client mapping, reducer updates, and UI output for running, completed, and failed tools.
+- Added `docs/tool-calling.md` with the request lifecycle, migration instructions, tool-extension rules, and live evaluation command.
+
+### Validation
+
+- Backend compilation and deterministic handler checks passed for arithmetic, text length, divide-by-zero, and unknown-tool behavior.
+- Targeted ESLint and TypeScript checks passed for the updated client API mapper, message component, chat hook, reducer, and types.
+- `git diff --check` passed.
+- The full frontend build remains blocked by the pre-existing JSX syntax errors in `src/AppChaining.ts`.
+
+### Follow-up
+
+- Add mocked streaming and database repository tests before enabling multiple or parallel tool calls.
