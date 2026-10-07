@@ -245,6 +245,15 @@ export function useChat() {
 
             break;
           }
+          case "tool_error": {
+            dispatch({
+              type: "stream/toolCallFailed",
+              callId: event.call_id,
+              error: event.error,
+            });
+
+            break;
+          }
 
           case "error":
             dispatch({

@@ -63,6 +63,12 @@ export type StreamEvent =
       error?: string;
     }
   | {
+      type: "tool_error";
+      call_id: string;
+      name: string;
+      error: string;
+    }
+  | {
       type: "incomplete";
       reason: string;
     }

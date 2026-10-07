@@ -33,6 +33,8 @@ uv run python -m app.evals.tool_call_test
 
 This sends three live OpenAI requests and exercises arithmetic and text-length calls. It requires `OPENAI_API_KEY` and a configured `OPENAI_MODEL`; it does not write to the application database.
 
+For structured routing, argument, execution, and no-tool coverage, see [Tool evaluation](tool-evaluation.md).
+
 ## Current scope
 
 Each model turn supports one sequential tool call. Multi-tool planning and parallel calls can be added later if a product workflow needs them.

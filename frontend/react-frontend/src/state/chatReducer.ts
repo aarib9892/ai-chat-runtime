@@ -91,6 +91,11 @@ export type ChatAction =
       error?: string;
     }
   | {
+      type: "stream/toolCallFailed";
+      callId: string;
+      error: string;
+    }
+  | {
       type: "stream/incomplete";
       reason: string;
     };
@@ -338,6 +343,24 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               error: action.error,
             };
           }),
+        })),
+      };
+
+    case "stream/toolCallFailed":
+      return {
+        ...state,
+
+        messages: updateLastAssistant(state.messages, (message) => ({
+          ...message,
+          toolCalls: message.toolCalls?.map((toolCall) =>
+            toolCall.callId === action.callId
+              ? {
+                  ...toolCall,
+                  status: "error",
+                  error: action.error,
+                }
+              : toolCall,
+          ),
         })),
       };
 

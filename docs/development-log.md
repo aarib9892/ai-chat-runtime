@@ -137,3 +137,23 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Add mocked streaming and database repository tests before enabling multiple or parallel tool calls.
+
+## 2026-10-07 — Tool validation and controlled failures
+
+### Completed
+
+- Added strict Pydantic argument models to the allow-listed tool registry, rejecting malformed, non-object, unexpected, and incorrectly typed tool arguments before handlers run.
+- Changed tool execution to return a structured success or failure result so invalid arguments, unknown tools, and handler errors are persisted and returned to the model as controlled tool outcomes.
+- Added a streamed `tool_error` event and client reducer support so a failed call is visibly marked without changing unrelated streaming messages.
+- Added a ten-case live tool evaluator covering routing, arguments, successful results, controlled divide-by-zero behavior, and prompts that should not invoke a tool.
+- Added `docs/tool-evaluation.md` and linked it from the tool-calling guide.
+
+### Validation
+
+- Backend compilation and deterministic checks passed for successful execution, strict type/extra-field rejection, invalid JSON, non-object arguments, unknown tools, divide-by-zero, and model-output serialization.
+- Targeted ESLint and TypeScript checks passed for the updated chat hook, reducer, and stream-event types.
+- `git diff --check` passed.
+
+### Follow-up
+
+- Establish an acceptable live-evaluation pass-rate policy before running the evaluator in CI.

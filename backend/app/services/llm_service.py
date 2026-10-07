@@ -43,7 +43,7 @@ def build_tool_result_event(
     call_id: str,
     name: str,
     status: str,
-    result: dict[str, object] | None = None,
+    result: object | None = None,
     error: str | None = None,
 ) -> str:
     event: dict[str, object] = {
@@ -208,9 +208,16 @@ async def stream_llm(
         if tool_call is None:
             raise RuntimeError("Initial response stream ended without a terminal event")
 
-        arguments = json.loads(tool_call["arguments"])
-        if not isinstance(arguments, dict):
-            raise ValueError("Tool arguments must be a JSON object")
+        try:
+            arguments = json.loads(tool_call["arguments"])
+            if not isinstance(arguments, dict):
+                arguments = {
+                    "_raw": arguments,
+                }
+        except json.JSONDecodeError:
+            arguments = {
+                "_raw": tool_call["arguments"],
+            }
 
         await create_tool_call(
             message_id=assistant_message_id,
@@ -224,36 +231,41 @@ async def stream_llm(
             arguments=arguments,
         )
 
-        try:
-            tool_result = execute_tool(
-                name=tool_call["name"],
-                arguments_json=tool_call["arguments"],
-            )
+        execution = execute_tool(
+            name=tool_call["name"],
+            arguments_json=tool_call["arguments"],
+        )
+        if execution.ok:
             await complete_tool_call(
                 message_id=assistant_message_id,
                 call_id=tool_call["call_id"],
-                result=tool_result,
+                result=execution.result,
             )
             yield build_tool_result_event(
                 call_id=tool_call["call_id"],
                 name=tool_call["name"],
                 status="completed",
-                result=tool_result,
+                result=execution.result,
             )
-        except Exception as exc:
-            tool_error = str(exc) or "Tool execution failed"
+        else:
+            tool_error = execution.error or "Tool execution failed."
+
             await fail_tool_call(
                 message_id=assistant_message_id,
                 call_id=tool_call["call_id"],
                 error=tool_error,
             )
-            tool_result = {"error": tool_error}
-            yield build_tool_result_event(
-                call_id=tool_call["call_id"],
-                name=tool_call["name"],
-                status="error",
-                error=tool_error,
-            )
+
+            yield json.dumps(
+                {
+                    "type": "tool_error",
+                    "call_id": tool_call["call_id"],
+                    "name": tool_call["name"],
+                    "error": tool_error,
+                }
+            ) + "\n"
+
+        tool_output = execution.to_model_output()
 
         if first_response_id is None:
             raise RuntimeError("Missing first response ID for tool continuation")
@@ -265,7 +277,7 @@ async def stream_llm(
                 {
                     "type": "function_call_output",
                     "call_id": tool_call["call_id"],
-                    "output": json.dumps(tool_result),
+                    "output": json.dumps(tool_output),
                 }
             ],
             tools=TOOLS,
