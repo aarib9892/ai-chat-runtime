@@ -9,6 +9,7 @@ async def create_tool_call(
     call_id: str,
     tool_name: str,
     arguments: dict,
+    step_number: int | None = None,
     connection=None,
 ):
     db = connection or get_pool()
@@ -20,14 +21,16 @@ async def create_tool_call(
             call_id,
             tool_name,
             arguments,
-            status
+            status,
+            step_number
         )
         VALUES (
             $1,
             $2,
             $3,
             $4::jsonb,
-            'running'
+            'running',
+            $5
         )
         RETURNING
             id,
@@ -38,6 +41,7 @@ async def create_tool_call(
             result,
             status,
             error,
+            step_number,
             created_at,
             completed_at
         """,
@@ -45,6 +49,7 @@ async def create_tool_call(
         call_id,
         tool_name,
         json.dumps(arguments),
+        step_number,
     )
 
 
@@ -137,6 +142,7 @@ async def get_tool_calls_for_messages(
             result,
             status,
             error,
+            step_number,
             created_at,
             completed_at
         FROM message_tool_calls

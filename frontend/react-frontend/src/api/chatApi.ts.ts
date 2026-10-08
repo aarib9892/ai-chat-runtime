@@ -22,9 +22,20 @@ export function mapBackendMessage(message: BackendMessage): Message {
         callId: toolCall.call_id,
         name: toolCall.name,
         arguments: toolCall.arguments,
+        step: toolCall.step ?? undefined,
         status: toolCall.status,
         result: toolCall.result ?? undefined,
         error: toolCall.error ?? undefined,
+      })) ?? [],
+
+    agentSteps:
+      message.agent_steps?.map((step) => ({
+        step: step.step,
+        responseId: step.response_id,
+        status: step.status,
+        outcome: step.outcome,
+        startedAt: step.started_at,
+        completedAt: step.completed_at,
       })) ?? [],
   };
 }

@@ -24,3 +24,5 @@ uv run python -m app.evals.tool_eval
 The command requires `OPENAI_API_KEY` and a configured `OPENAI_MODEL`. It sends live OpenAI requests, so it incurs provider usage and may vary with model behavior. It does not write to the application database.
 
 The process exits with status `0` only when every case passes, making it suitable for an explicit CI step once the expected pass-rate policy is defined.
+
+For a manual live check of multi-step chaining, see [Agent tool loop](agent-loop.md).

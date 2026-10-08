@@ -157,3 +157,24 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Establish an acceptable live-evaluation pass-rate policy before running the evaluator in CI.
+
+## 2026-10-08 — Bounded multi-step tool agent
+
+### Completed
+
+- Replaced the single-tool continuation path with a bounded agent loop that can execute sequential tool calls across Responses API turns.
+- Added typed agent events and step persistence, including provider response IDs, outcomes, terminal statuses, and a link from every new tool call to its step.
+- Added loop safeguards for maximum steps, total tool calls, and repeated equivalent tool calls; bound violations produce persisted incomplete responses.
+- Extended restored-conversation data and client mapping with agent-step history and tool step numbers, and removed development-only stream logging.
+- Added migration 007 and `docs/agent-loop.md`, updating existing tool documentation to describe the new sequential multi-step scope.
+
+### Validation
+
+- Backend compilation and mocked agent-loop checks passed for a successful two-step tool chain, a controlled divide-by-zero failure, exact function-output continuation input, and the repeated-call safety limit.
+- Targeted ESLint and TypeScript checks passed for restored agent-step mapping and live stream-event handling.
+- Migration 007 was reviewed for clean-database ordering and existing tool-call compatibility; `step_number` is nullable for rows created before the agent loop.
+- `git diff --check` passed.
+
+### Follow-up
+
+- Add automated repository integration tests against a temporary PostgreSQL database for agent-step and tool-call persistence.

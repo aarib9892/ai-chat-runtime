@@ -14,11 +14,19 @@ class ToolExecutionResult:
     result: Any | None = None
     error: str | None = None
 
-    def to_model_output(self) -> dict[str, Any]:
+    def to_model_output(self) -> str:
         if self.ok:
-            return {"result": self.result}
+            return json.dumps(
+                {
+                    "result": self.result,
+                }
+            )
 
-        return {"error": self.error}
+        return json.dumps(
+            {
+                "error": self.error,
+            }
+        )
 
 
 def execute_tool(

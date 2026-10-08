@@ -10,6 +10,7 @@ export type MessageToolCall = {
   name: string;
   arguments: Record<string, unknown>;
   status: ToolCallStatus;
+  step?: number;
   result?: unknown;
   error?: string;
 };
@@ -26,6 +27,7 @@ export type Message = {
   status?: MessageStatus;
   sources?: MessageSource[];
   toolCalls?: MessageToolCall[];
+  agentSteps?: AgentStep[];
 };
 
 type RetrievalSource = {
@@ -52,6 +54,7 @@ export type StreamEvent =
       type: "tool_call";
       call_id: string;
       name: string;
+      step?: number;
       arguments: Record<string, unknown>;
     }
   | {
@@ -67,6 +70,15 @@ export type StreamEvent =
       call_id: string;
       name: string;
       error: string;
+    }
+  | {
+      type: "agent_step_started";
+      step: number;
+    }
+  | {
+      type: "agent_step_completed";
+      step: number;
+      outcome: "tool" | "final" | "continue";
     }
   | {
       type: "incomplete";
@@ -95,6 +107,7 @@ export type BackendToolCall = {
   call_id: string;
   name: string;
   arguments: Record<string, unknown>;
+  step: number | null;
   status: ToolCallStatus;
   result: unknown | null;
   error: string | null;
@@ -120,8 +133,26 @@ export type BackendMessage = {
 
   sources?: BackendMessageSource[];
   tool_calls?: BackendToolCall[];
+  agent_steps?: BackendAgentStep[];
 };
 
 export type BackendConversationWithMessages = Conversation & {
   messages: BackendMessage[];
+};
+export type AgentStep = {
+  step: number;
+  responseId: string | null;
+  status: "running" | "completed" | "incomplete" | "stopped" | "error";
+  outcome: "tool" | "final" | "continue" | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type BackendAgentStep = {
+  step: number;
+  response_id: string | null;
+  status: AgentStep["status"];
+  outcome: AgentStep["outcome"];
+  started_at: string;
+  completed_at: string | null;
 };

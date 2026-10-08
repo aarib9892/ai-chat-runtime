@@ -228,6 +228,7 @@ export function useChat() {
                 callId: event.call_id,
                 name: event.name,
                 arguments: event.arguments,
+                step: event.step,
                 status: "running",
               },
             });
@@ -252,6 +253,10 @@ export function useChat() {
               error: event.error,
             });
 
+            break;
+          }
+          case "agent_step_started":
+          case "agent_step_completed": {
             break;
           }
 

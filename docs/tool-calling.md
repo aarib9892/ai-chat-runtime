@@ -37,4 +37,4 @@ For structured routing, argument, execution, and no-tool coverage, see [Tool eva
 
 ## Current scope
 
-Each model turn supports one sequential tool call. Multi-tool planning and parallel calls can be added later if a product workflow needs them.
+The runtime supports a bounded sequence of sequential tool calls. Parallel calls remain disabled; see [Agent tool loop](agent-loop.md) for the execution limits and persistence model.

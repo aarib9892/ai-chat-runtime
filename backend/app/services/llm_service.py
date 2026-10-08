@@ -2,10 +2,13 @@ import asyncio
 import json
 from uuid import UUID
 
-from openai import AsyncOpenAI
-
-from app.config.llm_config import MAX_OUTPUT_TOKENS, OPENAI_MODEL
 from app.db.database import get_pool
+from app.repositories.agent_step_repository import (
+    complete_agent_step,
+    create_agent_step,
+    mark_agent_step_status,
+    set_agent_step_response_id,
+)
 from app.repositories.conversation_repository import touch_conversation
 from app.repositories.message_repository import update_message
 from app.repositories.tool_call_repository import (
@@ -14,52 +17,18 @@ from app.repositories.tool_call_repository import (
     fail_tool_call,
 )
 from app.services.retrieval_service import RetrievedChunk
-from app.services.token_service import count_context_tokens
-from app.services.tool_service import execute_tool
-from app.tools.definitions import TOOLS
-
-client = AsyncOpenAI()
-
-
-def build_tool_call_event(
-    call_id: str,
-    name: str,
-    arguments: dict[str, object],
-) -> str:
-    return (
-        json.dumps(
-            {
-                "type": "tool_call",
-                "call_id": call_id,
-                "name": name,
-                "arguments": arguments,
-            }
-        )
-        + "\n"
-    )
-
-
-def build_tool_result_event(
-    call_id: str,
-    name: str,
-    status: str,
-    result: object | None = None,
-    error: str | None = None,
-) -> str:
-    event: dict[str, object] = {
-        "type": "tool_result",
-        "call_id": call_id,
-        "name": name,
-        "status": status,
-    }
-
-    if result is not None:
-        event["result"] = result
-
-    if error is not None:
-        event["error"] = error
-
-    return json.dumps(event) + "\n"
+from app.services.agent_service import stream_agent
+from app.services.agent_events import (
+    AgentCompleted,
+    AgentIncomplete,
+    AgentResponseCreated,
+    AgentStepCompleted,
+    AgentStepStarted,
+    AgentTextDelta,
+    AgentToolCall,
+    AgentToolError,
+    AgentToolResult,
+)
 
 
 async def persist_assistant_result(
@@ -84,25 +53,6 @@ async def persist_assistant_result(
             await touch_conversation(conversation_id, connection=connection)
 
 
-def log_token_usage(usage, estimated_input_tokens: int):
-    if not usage:
-        return
-
-    actual_input_tokens = usage.input_tokens
-    difference = actual_input_tokens - estimated_input_tokens
-    error_percentage = (
-        (difference / actual_input_tokens) * 100 if actual_input_tokens else 0
-    )
-
-    print("=== TOKEN USAGE ===")
-    print("Estimated input:", estimated_input_tokens)
-    print("Actual input:", actual_input_tokens)
-    print("Difference:", difference)
-    print("Estimation error %:", round(error_percentage, 2))
-    print("Output tokens:", usage.output_tokens)
-    print("Total tokens:", usage.total_tokens)
-
-
 async def stream_llm(
     context: list[dict],
     user_message_id: UUID,
@@ -112,11 +62,13 @@ async def stream_llm(
 ):
     full_response = ""
     provider_response_id: str | None = None
-    first_response_id: str | None = None
-    tool_call: dict[str, str] | None = None
-    estimated_input_tokens = count_context_tokens(context)
+    active_agent_step: int | None = None
 
     try:
+        # ---------------------------------
+        # Application message identity
+        # ---------------------------------
+
         yield json.dumps(
             {
                 "type": "message_ids",
@@ -124,6 +76,10 @@ async def stream_llm(
                 "assistant_message_id": str(assistant_message_id),
             }
         ) + "\n"
+
+        # ---------------------------------
+        # RAG provenance
+        # ---------------------------------
 
         if retrieved_chunks:
             yield json.dumps(
@@ -141,164 +97,183 @@ async def stream_llm(
                 }
             ) + "\n"
 
-        stream = await client.responses.create(
-            model=OPENAI_MODEL,
-            input=context,
-            tools=TOOLS,
-            tool_choice="auto",
-            parallel_tool_calls=False,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
-            stream=True,
-        )
+        input_items = list(context)
 
-        async for event in stream:
-            if event.type == "response.created":
-                first_response_id = event.response.id
-                provider_response_id = event.response.id
+        # =================================
+        # AGENT RUNTIME
+        # =================================
 
-            elif event.type == "response.output_text.delta":
-                full_response += event.delta
-                yield json.dumps({"type": "delta", "delta": event.delta}) + "\n"
+        async for event in stream_agent(input_items=input_items):
 
-            elif event.type == "response.output_item.done":
-                item = event.item
+            # -----------------------------
+            # Step started
+            # -----------------------------
 
-                if item.type == "function_call":
-                    tool_call = {
-                        "call_id": item.call_id,
-                        "name": item.name,
-                        "arguments": item.arguments,
+            if isinstance(
+                event,
+                AgentStepStarted,
+            ):
+                active_agent_step = event.step
+                await create_agent_step(
+                    message_id=assistant_message_id,
+                    step_number=event.step,
+                )
+                yield json.dumps(
+                    {
+                        "type": "agent_step_started",
+                        "step": event.step,
                     }
+                ) + "\n"
 
-            elif event.type == "response.incomplete":
-                reason = "unknown"
+            # -----------------------------
+            # Provider response ID
+            # -----------------------------
 
-                if event.response.incomplete_details:
-                    reason = event.response.incomplete_details.reason
-
-                await persist_assistant_result(
-                    assistant_message_id=assistant_message_id,
-                    conversation_id=conversation_id,
-                    content=full_response,
-                    status="incomplete",
-                    provider_response_id=provider_response_id,
+            elif isinstance(
+                event,
+                AgentResponseCreated,
+            ):
+                provider_response_id = event.response_id
+                await set_agent_step_response_id(
+                    message_id=assistant_message_id,
+                    step_number=event.step,
+                    response_id=event.response_id,
                 )
 
-                yield json.dumps({"type": "incomplete", "reason": reason}) + "\n"
-                return
+                yield json.dumps(
+                    {
+                        "type": "response_id",
+                        "response_id": event.response_id,
+                    }
+                ) + "\n"
 
-            elif event.type == "response.failed":
-                raise RuntimeError("OpenAI response failed")
+            # -----------------------------
+            # Visible text
+            # -----------------------------
 
-            elif event.type == "response.completed":
-                if tool_call is not None:
-                    break
-
-                await persist_assistant_result(
-                    assistant_message_id=assistant_message_id,
-                    conversation_id=conversation_id,
-                    content=full_response,
-                    status="completed",
-                    provider_response_id=provider_response_id,
-                )
-                log_token_usage(event.response.usage, estimated_input_tokens)
-                yield json.dumps({"type": "done"}) + "\n"
-                return
-
-        if tool_call is None:
-            raise RuntimeError("Initial response stream ended without a terminal event")
-
-        try:
-            arguments = json.loads(tool_call["arguments"])
-            if not isinstance(arguments, dict):
-                arguments = {
-                    "_raw": arguments,
-                }
-        except json.JSONDecodeError:
-            arguments = {
-                "_raw": tool_call["arguments"],
-            }
-
-        await create_tool_call(
-            message_id=assistant_message_id,
-            call_id=tool_call["call_id"],
-            tool_name=tool_call["name"],
-            arguments=arguments,
-        )
-        yield build_tool_call_event(
-            call_id=tool_call["call_id"],
-            name=tool_call["name"],
-            arguments=arguments,
-        )
-
-        execution = execute_tool(
-            name=tool_call["name"],
-            arguments_json=tool_call["arguments"],
-        )
-        if execution.ok:
-            await complete_tool_call(
-                message_id=assistant_message_id,
-                call_id=tool_call["call_id"],
-                result=execution.result,
-            )
-            yield build_tool_result_event(
-                call_id=tool_call["call_id"],
-                name=tool_call["name"],
-                status="completed",
-                result=execution.result,
-            )
-        else:
-            tool_error = execution.error or "Tool execution failed."
-
-            await fail_tool_call(
-                message_id=assistant_message_id,
-                call_id=tool_call["call_id"],
-                error=tool_error,
-            )
-
-            yield json.dumps(
-                {
-                    "type": "tool_error",
-                    "call_id": tool_call["call_id"],
-                    "name": tool_call["name"],
-                    "error": tool_error,
-                }
-            ) + "\n"
-
-        tool_output = execution.to_model_output()
-
-        if first_response_id is None:
-            raise RuntimeError("Missing first response ID for tool continuation")
-
-        final_stream = await client.responses.create(
-            model=OPENAI_MODEL,
-            previous_response_id=first_response_id,
-            input=[
-                {
-                    "type": "function_call_output",
-                    "call_id": tool_call["call_id"],
-                    "output": json.dumps(tool_output),
-                }
-            ],
-            tools=TOOLS,
-            tool_choice="none",
-            max_output_tokens=MAX_OUTPUT_TOKENS,
-            stream=True,
-        )
-
-        async for event in final_stream:
-            if event.type == "response.created":
-                provider_response_id = event.response.id
-
-            elif event.type == "response.output_text.delta":
+            elif isinstance(
+                event,
+                AgentTextDelta,
+            ):
                 full_response += event.delta
-                yield json.dumps({"type": "delta", "delta": event.delta}) + "\n"
 
-            elif event.type == "response.incomplete":
-                reason = "unknown"
+                yield json.dumps(
+                    {
+                        "type": "delta",
+                        "delta": event.delta,
+                    }
+                ) + "\n"
 
-                if event.response.incomplete_details:
-                    reason = event.response.incomplete_details.reason
+            # -----------------------------
+            # Tool requested
+            # -----------------------------
+
+            elif isinstance(
+                event,
+                AgentToolCall,
+            ):
+                await create_tool_call(
+                    message_id=assistant_message_id,
+                    call_id=event.call_id,
+                    tool_name=event.tool_name,
+                    arguments=event.arguments,
+                    step_number=event.step,
+                )
+
+                yield json.dumps(
+                    {
+                        "type": "tool_call",
+                        "call_id": event.call_id,
+                        "name": event.tool_name,
+                        "step": event.step,
+                        "arguments": event.arguments,
+                    }
+                ) + "\n"
+
+            # -----------------------------
+            # Tool succeeded
+            # -----------------------------
+
+            elif isinstance(
+                event,
+                AgentToolResult,
+            ):
+                await complete_tool_call(
+                    message_id=assistant_message_id,
+                    call_id=event.call_id,
+                    result=event.result,
+                )
+
+                yield json.dumps(
+                    {
+                        "type": "tool_result",
+                        "call_id": event.call_id,
+                        "name": event.tool_name,
+                        "status": "completed",
+                        "result": event.result,
+                    }
+                ) + "\n"
+
+            # -----------------------------
+            # Tool failed
+            # -----------------------------
+
+            elif isinstance(
+                event,
+                AgentToolError,
+            ):
+                await fail_tool_call(
+                    message_id=assistant_message_id,
+                    call_id=event.call_id,
+                    error=event.error,
+                )
+
+                yield json.dumps(
+                    {
+                        "type": "tool_error",
+                        "call_id": event.call_id,
+                        "name": event.tool_name,
+                        "error": event.error,
+                    }
+                ) + "\n"
+
+            # -----------------------------
+            # Agent step finished
+            # -----------------------------
+
+            elif isinstance(
+                event,
+                AgentStepCompleted,
+            ):
+                await complete_agent_step(
+                    message_id=assistant_message_id,
+                    step_number=event.step,
+                    outcome=event.outcome,
+                )
+                yield json.dumps(
+                    {
+                        "type": "agent_step_completed",
+                        "step": event.step,
+                        "outcome": event.outcome,
+                    }
+                ) + "\n"
+                active_agent_step = None
+
+            # -----------------------------
+            # Agent incomplete
+            # -----------------------------
+
+            elif isinstance(
+                event,
+                AgentIncomplete,
+            ):
+                if event.response_id:
+                    provider_response_id = event.response_id
+                await mark_agent_step_status(
+                    message_id=assistant_message_id,
+                    step_number=event.step,
+                    status="incomplete",
+                )
 
                 await persist_assistant_result(
                     assistant_message_id=assistant_message_id,
@@ -307,13 +282,29 @@ async def stream_llm(
                     status="incomplete",
                     provider_response_id=provider_response_id,
                 )
-                yield json.dumps({"type": "incomplete", "reason": reason}) + "\n"
+
+                yield json.dumps(
+                    {
+                        "type": "incomplete",
+                        "reason": event.reason,
+                    }
+                ) + "\n"
+
                 return
 
-            elif event.type == "response.failed":
-                raise RuntimeError("OpenAI final response failed")
+            # -----------------------------
+            # Agent completed
+            # -----------------------------
 
-            elif event.type == "response.completed":
+            elif isinstance(
+                event,
+                AgentCompleted,
+            ):
+                provider_response_id = event.response_id
+
+                if not full_response:
+                    full_response = event.final_text
+
                 await persist_assistant_result(
                     assistant_message_id=assistant_message_id,
                     conversation_id=conversation_id,
@@ -321,12 +312,25 @@ async def stream_llm(
                     status="completed",
                     provider_response_id=provider_response_id,
                 )
-                yield json.dumps({"type": "done"}) + "\n"
+
+                yield json.dumps(
+                    {
+                        "type": "done",
+                    }
+                ) + "\n"
+
                 return
 
-        raise RuntimeError("Final response stream ended without a terminal event")
+        # Defensive case
+        raise RuntimeError("Agent stream ended without " "a terminal event.")
 
     except asyncio.CancelledError:
+        if active_agent_step is not None:
+            await mark_agent_step_status(
+                message_id=assistant_message_id,
+                step_number=active_agent_step,
+                status="stopped",
+            )
         await persist_assistant_result(
             assistant_message_id=assistant_message_id,
             conversation_id=conversation_id,
@@ -334,9 +338,17 @@ async def stream_llm(
             status="stopped",
             provider_response_id=provider_response_id,
         )
+
         raise
 
     except GeneratorExit:
+        if active_agent_step is not None:
+            await mark_agent_step_status(
+                message_id=assistant_message_id,
+                step_number=active_agent_step,
+                status="stopped",
+            )
+
         await persist_assistant_result(
             assistant_message_id=assistant_message_id,
             conversation_id=conversation_id,
@@ -344,9 +356,16 @@ async def stream_llm(
             status="stopped",
             provider_response_id=provider_response_id,
         )
+
         raise
 
     except Exception:
+        if active_agent_step is not None:
+            await mark_agent_step_status(
+                message_id=assistant_message_id,
+                step_number=active_agent_step,
+                status="error",
+            )
         await persist_assistant_result(
             assistant_message_id=assistant_message_id,
             conversation_id=conversation_id,
@@ -354,13 +373,15 @@ async def stream_llm(
             status="error",
             provider_response_id=provider_response_id,
         )
+
         yield json.dumps(
             {
                 "type": "error",
-                "message": "Something went wrong while generating the response.",
+                "message": (
+                    "Something went wrong " "while generating " "the response."
+                ),
             }
         ) + "\n"
-
 
 async def stream_static_response(
     text: str,

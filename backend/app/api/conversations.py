@@ -5,6 +5,7 @@ from app.db.database import get_pool
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from app.repositories.agent_step_repository import get_agent_steps_for_messages
 from app.repositories.conversation_repository import (
     create_conversation,
     get_conversation,
@@ -113,9 +114,12 @@ async def get_conversation_endpoint(
     # Load persisted tool calls
     # -----------------------------
 
-    tool_call_rows = await get_tool_calls_for_messages(assistant_message_ids)
-
+    tool_call_rows, agent_step_rows = await asyncio.gather(
+        get_tool_calls_for_messages(assistant_message_ids),
+        get_agent_steps_for_messages(assistant_message_ids),
+    )
     tool_calls_by_message = {}
+    agent_steps_by_message = {}
 
     for row in tool_call_rows:
         message_id = row["message_id"]
@@ -128,9 +132,26 @@ async def get_conversation_endpoint(
                 "call_id": row["call_id"],
                 "name": row["tool_name"],
                 "arguments": parse_json_value(row["arguments"]),
+                "step": row["step_number"],
                 "result": parse_json_value(row["result"]),
                 "status": row["status"],
                 "error": row["error"],
+            }
+        )
+    for row in agent_step_rows:
+        message_id = row["message_id"]
+
+        agent_steps_by_message.setdefault(
+            message_id,
+            [],
+        ).append(
+            {
+                "step": row["step_number"],
+                "response_id": row["provider_response_id"],
+                "status": row["status"],
+                "outcome": row["outcome"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
             }
         )
 
@@ -160,6 +181,10 @@ async def get_conversation_endpoint(
         message_data = dict(message)
 
         message_data["sources"] = sources_map.get(
+            message["id"],
+            [],
+        )
+        message_data["agent_steps"] = agent_steps_by_message.get(
             message["id"],
             [],
         )
