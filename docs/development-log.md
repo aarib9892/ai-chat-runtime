@@ -178,3 +178,21 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Add automated repository integration tests against a temporary PostgreSQL database for agent-step and tool-call persistence.
+
+## 2026-10-09 — Agent-loop evaluation coverage
+
+### Completed
+
+- Made the agent loop's total-tool-call and equivalent-call safeguards configurable per run while retaining the production defaults.
+- Added input validation for all agent-loop safety limits.
+- Added a seven-case live evaluator for multi-step tool chains, direct answers, controlled tool failures, and each safety-guard terminal path.
+- Added `docs/agent-evaluation.md` and linked the new evaluator from the agent-loop guide.
+
+### Validation
+
+- Backend compilation and mocked agent/evaluator checks passed without issuing live OpenAI requests.
+- `git diff --check` passed.
+
+### Follow-up
+
+- Run the live evaluator against the configured production model and establish a pass-rate policy before enabling it in CI.

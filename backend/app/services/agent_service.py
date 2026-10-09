@@ -62,8 +62,17 @@ def parse_tool_arguments(arguments_json: str) -> dict[str, Any]:
 async def stream_agent(
     input_items: list[dict],
     max_steps: int = MAX_AGENT_STEPS,
+    max_tool_calls: int = MAX_AGENT_TOOL_CALLS,
+    max_identical_tool_calls: int = MAX_IDENTICAL_TOOL_CALLS,
 ) -> AsyncIterator[AgentEvent]:
     """Run a bounded Responses API tool loop without persistence concerns."""
+    if max_steps < 1:
+        raise ValueError("max_steps must be at least 1")
+    if max_tool_calls < 0:
+        raise ValueError("max_tool_calls must not be negative")
+    if max_identical_tool_calls < 0:
+        raise ValueError("max_identical_tool_calls must not be negative")
+
     tool_steps: list[AgentToolStep] = []
     total_tool_calls = 0
     tool_call_counts: dict[str, int] = {}
@@ -148,7 +157,7 @@ async def stream_agent(
                 return
 
             prospective_total = total_tool_calls + len(tool_calls)
-            if prospective_total > MAX_AGENT_TOOL_CALLS:
+            if prospective_total > max_tool_calls:
                 yield AgentIncomplete(
                     step=step_number,
                     reason="max_tool_calls",
@@ -165,7 +174,7 @@ async def stream_agent(
                 signature = build_tool_signature(call.name, arguments)
                 next_count = prospective_counts.get(signature, 0) + 1
 
-                if next_count > MAX_IDENTICAL_TOOL_CALLS:
+                if next_count > max_identical_tool_calls:
                     yield AgentIncomplete(
                         step=step_number,
                         reason="repeated_tool_call",
@@ -260,9 +269,16 @@ async def stream_agent(
 async def run_agent(
     input_items: list[dict],
     max_steps: int = MAX_AGENT_STEPS,
+    max_tool_calls: int = MAX_AGENT_TOOL_CALLS,
+    max_identical_tool_calls: int = MAX_IDENTICAL_TOOL_CALLS,
 ) -> AgentResult:
     """Consume ``stream_agent`` and return its completed final answer."""
-    async for event in stream_agent(input_items=input_items, max_steps=max_steps):
+    async for event in stream_agent(
+        input_items=input_items,
+        max_steps=max_steps,
+        max_tool_calls=max_tool_calls,
+        max_identical_tool_calls=max_identical_tool_calls,
+    ):
         if isinstance(event, AgentCompleted):
             return AgentResult(
                 final_text=event.final_text,
