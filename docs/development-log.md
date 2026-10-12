@@ -196,3 +196,24 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Run the live evaluator against the configured production model and establish a pass-rate policy before enabling it in CI.
+
+## 2026-10-12 — Runtime reliability and observability
+
+### Completed
+
+- Added request IDs, structured HTTP and stream error metadata, and provider-error mapping for the agent runtime.
+- Added process-local request-rate and concurrent-agent safeguards, plus a database invariant that permits one streaming assistant response per conversation.
+- Recorded per-step durations and token counts and aggregate completed-message usage with configurable cost estimates.
+- Added migration 008, ignore rules for generated local artifacts, and `docs/runtime-reliability.md` with configuration and deployment guidance.
+- Preserved the existing conversation-summary update path while applying the new overload controls.
+
+### Validation
+
+- Backend compilation and mocked agent-flow checks passed for terminal completion, per-step usage, aggregate usage, and a single provider request.
+- Deterministic checks passed for rate limiting, request-ID propagation, structured error envelopes, OpenAI rate-limit mapping, usage upserts, and agent-step persistence parameters.
+- Targeted ESLint passed for the changed API error and stream-event types; the full lint script remains blocked by the pre-existing parse error in `src/AppChaining.ts`.
+- `git diff --check` passed.
+
+### Follow-up
+
+- Replace process-local overload controls with shared infrastructure before horizontally scaling the backend.

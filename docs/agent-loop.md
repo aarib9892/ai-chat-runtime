@@ -17,6 +17,8 @@ Parallel tool calls remain disabled. The runtime allows up to five model steps, 
 
 Migration `007_message_agent_steps.sql` adds a nullable `step_number` to existing `message_tool_calls` rows and creates `message_agent_steps`. Existing calls remain valid with no step number. New calls and agent responses record their step, provider response ID, status, outcome, start time, and completion time.
 
+Migration `008_agent_runtime_observability.sql` adds token and duration metrics to completed agent steps and records aggregate usage for completed assistant messages. It also enforces one streaming assistant response per conversation. See [runtime reliability and observability](runtime-reliability.md) for the operational settings and deployment guidance.
+
 The restored conversation API includes `agent_steps` and per-tool `step` values. The client maps those snake-case API values into its conversation model, so the history is available after reload even when the live stream has ended.
 
 ## Manual live check

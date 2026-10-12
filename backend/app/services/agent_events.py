@@ -87,11 +87,18 @@ class AgentToolError:
 @dataclass(frozen=True)
 class AgentStepCompleted:
     step: int
+
     outcome: Literal[
         "tool",
         "final",
         "continue",
     ]
+
+    duration_ms: float = 0.0
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
     type: Literal["agent_step_completed"] = field(
         init=False,
@@ -103,8 +110,15 @@ class AgentStepCompleted:
 class AgentCompleted:
     final_text: str
     response_id: str
+
     total_steps: int
     tool_steps: list[AgentToolStep]
+
+    duration_ms: float = 0.0
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
     type: Literal["agent_completed"] = field(
         init=False,

@@ -1,10 +1,20 @@
 import asyncio
 import json
+import logging
 from uuid import UUID
+from app.runtime.concurrency import agent_semaphore
+import asyncpg
+from app.config.settings import AGENT_QUEUE_TIMEOUT_SECONDS
 from app.db.database import get_pool
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from app.errors import (
+    ConversationBusyError,
+    ConversationNotFoundError,
+    RateLimitedError,
+    ServerBusyError,
+)
 from app.repositories.agent_step_repository import get_agent_steps_for_messages
 from app.repositories.conversation_repository import (
     create_conversation,
@@ -13,6 +23,7 @@ from app.repositories.conversation_repository import (
     list_conversations,
     update_conversation_title,
 )
+from app.runtime.rate_limit import ask_rate_limiter
 
 from app.repositories.document_repository import (
     create_message_sources,
@@ -33,13 +44,13 @@ from app.services.context_service import build_context
 from app.services.llm_service import stream_llm, stream_static_response
 from app.services.retrieval_service import build_rag_message, retrieve_chunks
 from app.services.summary_service import (
-    SUMMARY_TRIGGER_TOKENS,
     generate_updated_summary,
     plan_summary_update,
 )
 from app.services.token_service import count_text_tokens
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 NO_RELEVANT_EVIDENCE_MESSAGE = (
     "I couldn't find relevant information in the selected "
     "document to answer that question."
@@ -96,11 +107,8 @@ async def get_conversation_endpoint(
 ):
     conversation = await get_conversation(conversation_id)
 
-    if conversation is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Conversation Not Found",
-        )
+    if not conversation:
+        raise ConversationNotFoundError()
 
     messages = await get_messages(conversation_id)
 
@@ -203,166 +211,187 @@ async def get_conversation_endpoint(
 
 
 @router.post("/conversations/{conversation_id}/ask")
-async def ask_conversation(conversation_id: UUID, payload: AskRequest):
+async def ask_conversation(
+    conversation_id: UUID, payload: AskRequest, request: Request
+):
+    client_ip = request.client.host if request.client else "unknown"
+    allowed = await ask_rate_limiter.allow(client_ip)
+
+    if not allowed:
+        raise RateLimitedError()
     conversation = await get_conversation(conversation_id)
+
     if conversation is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Conversation Not Found",
+        raise ConversationNotFoundError()
+
+    agent_slot_acquired = False
+    agent_slot_transferred = False
+
+    try:
+        # --------------------------------
+        # Global concurrency guard
+        # --------------------------------
+
+        try:
+            await asyncio.wait_for(
+                agent_semaphore.acquire(),
+                timeout=(AGENT_QUEUE_TIMEOUT_SECONDS),
+            )
+
+            agent_slot_acquired = True
+
+        except TimeoutError:
+            raise ServerBusyError()
+
+        # --------------------------------
+        # Create user + assistant placeholder
+        # --------------------------------
+
+        pool = get_pool()
+
+        async with pool.acquire() as connection:
+            try:
+                async with connection.transaction():
+
+                    user_message = await create_message(
+                        conversation_id=conversation_id,
+                        role="user",
+                        content=payload.message,
+                        status="completed",
+                        connection=connection,
+                    )
+
+                    assistant_message = await create_message(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content="",
+                        status="streaming",
+                        connection=connection,
+                    )
+
+                    if not conversation["title"]:
+                        await update_conversation_title(
+                            conversation_id,
+                            build_conversation_title(payload.message),
+                            connection=connection,
+                        )
+
+                    await touch_conversation(
+                        conversation_id,
+                        connection=connection,
+                    )
+
+            except asyncpg.UniqueViolationError as exc:
+                if exc.constraint_name == "uq_one_streaming_assistant_per_conversation":
+                    raise (ConversationBusyError()) from exc
+
+                raise
+
+        # --------------------------------
+        # Summary/context work
+        # --------------------------------
+
+        messages = await get_messages(conversation_id)
+
+        summary = await get_conversation_summary(conversation_id)
+
+        summary_plan = plan_summary_update(
+            messages=messages,
+            summary=summary,
+            current_message_id=user_message["id"],
         )
 
-    pool = get_pool()
-    async with pool.acquire() as connection:
-        async with connection.transaction():
-
-            user_message = await create_message(
-                conversation_id=conversation_id,
-                role="user",
-                content=payload.message,
-                status="completed",
-                connection=connection,
-            )
-            assistant_message = await create_message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content="",
-                status="streaming",
-                connection=connection,
-            )
-            if not conversation["title"]:
-                await update_conversation_title(
-                    conversation_id,
-                    build_conversation_title(payload.message),
-                    connection=connection,
+        if summary_plan.should_summarize:
+            try:
+                existing_summary = summary["summary"] if summary else None
+                updated_summary = await generate_updated_summary(
+                    existing_summary=existing_summary,
+                    messages_to_summarize=summary_plan.messages_to_summarize,
+                )
+                summary = await update_conversation_summary(
+                    conversation_id=conversation_id,
+                    summary=updated_summary,
+                    through_message_id=summary_plan.through_message_id,
+                    token_count=count_text_tokens(updated_summary),
+                )
+            except Exception:
+                logger.exception(
+                    "conversation_summary_update_failed",
+                    extra={"conversation_id": str(conversation_id)},
                 )
 
-            await touch_conversation(conversation_id, connection=connection)
-    messages = await get_messages(conversation_id)
-    summary = await get_conversation_summary(conversation_id)
-    summary_plan = plan_summary_update(
-        messages=messages,
-        summary=summary,
-        current_message_id=user_message["id"],
-    )
-    print("=== SUMMARY PLAN DEBUG ===")
-    print("Summary exists:", summary is not None)
+        # --------------------------------
+        # RAG
+        # --------------------------------
 
-    if summary:
-        print(
-            "Existing boundary:",
-            summary["through_message_id"],
+        retrieved_chunks = []
+        rag_message = None
+
+        if payload.document_id is not None:
+            retrieved_chunks = await retrieve_chunks(
+                query=payload.message,
+                document_id=payload.document_id,
+                top_k=3,
+            )
+
+            if not retrieved_chunks:
+                # No agent/model run needed.
+                # endpoint finally will release
+                # the semaphore.
+
+                return StreamingResponse(
+                    stream_static_response(
+                        text=(NO_RELEVANT_EVIDENCE_MESSAGE),
+                        user_message_id=user_message["id"],
+                        assistant_message_id=assistant_message["id"],
+                        conversation_id=conversation_id,
+                    ),
+                    media_type=("application/x-ndjson"),
+                )
+
+            await create_message_sources(
+                message_id=assistant_message["id"],
+                chunks=retrieved_chunks,
+            )
+
+            rag_message = build_rag_message(retrieved_chunks)
+
+        # --------------------------------
+        # Context
+        # --------------------------------
+
+        context = build_context(
+            messages,
+            current_message_id=user_message["id"],
+            summary=summary,
+            rag_message=rag_message,
         )
 
-    print(
-        "Unsummarized tokens:",
-        summary_plan.unsummarized_tokens,
-    )
+        # --------------------------------
+        # Transfer semaphore ownership
+        # to streaming generator
+        # --------------------------------
 
-    print(
-        "Trigger:",
-        SUMMARY_TRIGGER_TOKENS,
-    )
+        agent_slot_transferred = True
 
-    print(
-        "Should summarize:",
-        summary_plan.should_summarize,
-    )
-
-    print(
-        "Messages to summarize:",
-        len(summary_plan.messages_to_summarize),
-    )
-
-    print(
-        "Recent messages:",
-        len(summary_plan.recent_messages),
-    )
-    if summary_plan.should_summarize:
-        try:
-
-            existing_summary_text = summary["summary"] if summary else None
-            updated_summary = await generate_updated_summary(
-                existing_summary=existing_summary_text,
-                messages_to_summarize=summary_plan.messages_to_summarize,
-            )
-            summary_token_count = count_text_tokens(updated_summary)
-            summary = await update_conversation_summary(
+        return StreamingResponse(
+            stream_llm(
+                context=context,
+                user_message_id=user_message["id"],
+                assistant_message_id=assistant_message["id"],
                 conversation_id=conversation_id,
-                summary=updated_summary,
-                through_message_id=summary_plan.through_message_id,
-                token_count=summary_token_count,
-            )
-            print("=== SUMMARY UPDATE ===")
-
-            print(
-                "Messages summarized:",
-                len(summary_plan.messages_to_summarize),
-            )
-
-            print(
-                "Source tokens:",
-                summary_plan.summarize_tokens,
-            )
-
-            print(
-                "Summary tokens:",
-                summary["token_count"],
-            )
-
-            print(
-                "New boundary:",
-                summary["through_message_id"],
-            )
-        except Exception as error:
-            print(
-                "Summary update failed:",
-                repr(error),
-            )
-    retrieved_chunks = []
-    rag_message = None
-
-    if payload.document_id is not None:
-        retrieved_chunks = await retrieve_chunks(
-            query=payload.message,
-            document_id=payload.document_id,
-            top_k=3,
+                retrieved_chunks=retrieved_chunks,
+                release_agent_slot=True,
+            ),
+            media_type=("application/x-ndjson"),
         )
 
-        if not retrieved_chunks:
-            return StreamingResponse(
-                stream_static_response(
-                    text=NO_RELEVANT_EVIDENCE_MESSAGE,
-                    user_message_id=user_message["id"],
-                    assistant_message_id=assistant_message["id"],
-                    conversation_id=conversation_id,
-                ),
-                media_type="application/x-ndjson",
-            )
+    finally:
+        # If stream_llm did NOT take ownership,
+        # release here.
 
-        await create_message_sources(
-            message_id=assistant_message["id"],
-            chunks=retrieved_chunks,
-        )
-
-        rag_message = build_rag_message(retrieved_chunks)
-
-    context = build_context(
-        messages,
-        current_message_id=user_message["id"],
-        summary=summary,
-        rag_message=rag_message,
-    )
-
-    return StreamingResponse(
-        stream_llm(
-            context=context,
-            user_message_id=user_message["id"],
-            assistant_message_id=assistant_message["id"],
-            conversation_id=conversation_id,
-            retrieved_chunks=retrieved_chunks,
-        ),
-        media_type="application/x-ndjson",
-    )
+        if agent_slot_acquired and not agent_slot_transferred:
+            agent_semaphore.release()
 
 
 @router.get("/conversations")

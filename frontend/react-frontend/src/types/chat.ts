@@ -89,7 +89,9 @@ export type StreamEvent =
     }
   | {
       type: "error";
+      code: string;
       message: string;
+      retryable: boolean;
     };
 export type Conversation = {
   id: string;

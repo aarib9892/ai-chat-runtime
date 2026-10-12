@@ -1,6 +1,14 @@
 import type { BackendMessage, Message } from "../types/chat";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
+export type ApiErrorResponse = {
+  error: {
+    code: string;
+    message: string;
+    retryable: boolean;
+    request_id: string | null;
+  };
+};
 
 export function mapBackendMessage(message: BackendMessage): Message {
   return {

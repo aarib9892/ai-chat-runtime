@@ -60,6 +60,10 @@ async def complete_agent_step(
     message_id: UUID,
     step_number: int,
     outcome: str,
+    duration_ms: float,
+    input_tokens: int,
+    output_tokens: int,
+    total_tokens: int,
     connection=None,
 ):
     db = connection or get_pool()
@@ -70,6 +74,10 @@ async def complete_agent_step(
         SET
             status = 'completed',
             outcome = $3,
+            duration_ms = $4,
+            input_tokens = $5,
+            output_tokens = $6,
+            total_tokens = $7,
             completed_at = NOW()
         WHERE message_id = $1
           AND step_number = $2
@@ -78,6 +86,10 @@ async def complete_agent_step(
         message_id,
         step_number,
         outcome,
+        duration_ms,
+        input_tokens,
+        output_tokens,
+        total_tokens,
     )
 
 
