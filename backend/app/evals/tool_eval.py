@@ -5,11 +5,11 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from app.config.llm_config import OPENAI_MODEL
+from app.config.settings import settings
 from app.services.tool_service import execute_tool
 from app.tools.definitions import TOOLS
 
-client = AsyncOpenAI()
+client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 @dataclass(frozen=True)
@@ -160,7 +160,7 @@ async def evaluate_case(
 ) -> dict:
 
     response = await client.responses.create(
-        model=OPENAI_MODEL,
+        model=settings.openai_model,
         input=[
             {
                 "role": "user",

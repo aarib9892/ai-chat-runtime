@@ -3,9 +3,7 @@ import json
 
 from openai import AsyncOpenAI
 
-from app.config.llm_config import (
-    OPENAI_MODEL,
-)
+from app.config.settings import settings
 
 from app.services.tool_service import (
     execute_tool,
@@ -15,7 +13,7 @@ from app.tools.definitions import (
     TOOLS,
 )
 
-client = AsyncOpenAI()
+client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 async def run_test(prompt: str):
@@ -27,7 +25,7 @@ async def run_test(prompt: str):
     ]
 
     response = await client.responses.create(
-        model=OPENAI_MODEL,
+        model=settings.openai_model,
         input=input_items,
         tools=TOOLS,
         tool_choice="auto",
@@ -78,7 +76,7 @@ async def run_test(prompt: str):
         return
 
     final_response = await client.responses.create(
-        model=OPENAI_MODEL,
+        model=settings.openai_model,
         previous_response_id=response.id,
         input=tool_outputs,
         tools=TOOLS,

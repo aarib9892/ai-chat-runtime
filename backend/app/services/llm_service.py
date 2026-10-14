@@ -2,7 +2,7 @@ import asyncio
 import json
 from uuid import UUID
 import logging
-from app.config.llm_config import OPENAI_MODEL
+from app.config.settings import settings
 from app.db.database import get_pool
 from app.errors import AppError
 from app.observability.cost import estimate_openai_cost_usd
@@ -408,7 +408,7 @@ async def stream_llm(
                 )
                 await upsert_message_usage(
                     message_id=assistant_message_id,
-                    model=OPENAI_MODEL,
+                    model=settings.openai_model,
                     model_calls=event.total_steps,
                     input_tokens=event.input_tokens,
                     output_tokens=event.output_tokens,

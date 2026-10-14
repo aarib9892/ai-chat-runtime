@@ -217,3 +217,25 @@ Use this file as an append-only record of meaningful implementation work. Add a 
 ### Follow-up
 
 - Replace process-local overload controls with shared infrastructure before horizontally scaling the backend.
+
+## 2026-10-14 — Validated configuration and container deployment
+
+### Completed
+
+- Added validated environment-based settings and centralized model, embedding, agent-safety, concurrency, rate-limit, CORS, and usage-cost configuration.
+- Added Docker images, Compose orchestration, a migration runner, backend readiness checks, and an Nginx proxy for production-style local deployment.
+- Added safe root and backend environment templates plus Docker ignore rules, keeping local environment files and build contexts free of credentials.
+- Renamed the legacy JSX-containing `AppChaining` module to `.tsx`, allowing frontend tooling to parse it correctly.
+- Added deployment documentation with configuration, migration-ledger, health-check, and credential-handling guidance.
+
+### Validation
+
+- Settings and runtime imports passed with dummy local configuration and no provider calls.
+- Backend compilation, frozen dependency synchronization, and Compose configuration validation passed.
+- Fresh PostgreSQL migration verification applied migrations 001–008 successfully in an isolated temporary Compose stack that was removed afterward.
+- Frontend ESLint and production build passed; both backend and frontend container images built successfully.
+- `git diff --check` passed.
+
+### Follow-up
+
+- Add a deliberate baseline workflow for existing manually migrated databases before adopting the Compose migrator in production.

@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pgvector import Vector
 
-from app.config.llm_config import EMBEDDING_MODEL
+from app.config.settings import settings
 from app.db.database import get_pool
 
 
@@ -139,7 +139,7 @@ async def update_chunk_embedding(
         """,
         chunk_id,
         Vector(embedding),
-        EMBEDDING_MODEL,
+        settings.embedding_model,
     )
 
     return None if row is None else dict(row)
@@ -172,7 +172,7 @@ async def update_chunk_embeddings(
                     """,
                     chunk["id"],
                     Vector(embedding),
-                    EMBEDDING_MODEL,
+                    settings.embedding_model,
                 )
 
 
@@ -208,7 +208,7 @@ async def search_document_chunks(
             LIMIT $4
             """,
             Vector(query_embedding),
-            EMBEDDING_MODEL,
+            settings.embedding_model,
             document_id,
             limit,
         )
@@ -236,7 +236,7 @@ async def search_document_chunks(
             LIMIT $3
             """,
             Vector(query_embedding),
-            EMBEDDING_MODEL,
+            settings.embedding_model,
             limit,
         )
 

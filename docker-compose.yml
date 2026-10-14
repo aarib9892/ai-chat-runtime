@@ -1,0 +1,125 @@
+services:
+  db:
+    image: pgvector/pgvector:pg14
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./backend
+
+    command:
+      [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "app.db.migrate"
+      ]
+
+    environment:
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./frontend/react-frontend
+      args:
+        VITE_API_BASE_URL: /api
+
+    ports:
+      - "3000:80"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+  backend:
+    build:
+      context: ./backend
+
+    environment:
+      ENVIRONMENT: production
+
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+
+      MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-2000}
+
+      APP_MAX_INPUT_TOKENS: ${APP_MAX_INPUT_TOKENS:-8000}
+      SAFETY_MARGIN_TOKENS: ${SAFETY_MARGIN_TOKENS:-500}
+      TOKEN_ESTIMATION_BUFFER: ${TOKEN_ESTIMATION_BUFFER:-0.05}
+      SUMMARY_MAX_OUTPUT_TOKENS: ${SUMMARY_MAX_OUTPUT_TOKENS:-800}
+
+      MAX_AGENT_STEPS: ${MAX_AGENT_STEPS:-5}
+      MAX_AGENT_TOOL_CALLS: ${MAX_AGENT_TOOL_CALLS:-8}
+      MAX_IDENTICAL_TOOL_CALLS: ${MAX_IDENTICAL_TOOL_CALLS:-2}
+
+      MAX_CONCURRENT_AGENT_RUNS: ${MAX_CONCURRENT_AGENT_RUNS:-5}
+      AGENT_QUEUE_TIMEOUT_SECONDS: ${AGENT_QUEUE_TIMEOUT_SECONDS:-5}
+
+      ASK_RATE_LIMIT: ${ASK_RATE_LIMIT:-20}
+      ASK_RATE_WINDOW_SECONDS: ${ASK_RATE_WINDOW_SECONDS:-60}
+
+      OPENAI_INPUT_COST_PER_1M_USD: ${OPENAI_INPUT_COST_PER_1M_USD:-0}
+      OPENAI_OUTPUT_COST_PER_1M_USD: ${OPENAI_OUTPUT_COST_PER_1M_USD:-0}
+
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "uv",
+          "run",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:

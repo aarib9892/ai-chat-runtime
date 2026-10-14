@@ -3,13 +3,13 @@ from uuid import UUID
 from app.services.token_service import (
     count_message_tokens,
 )
-from app.config.llm_config import OPENAI_MODEL, SUMMARY_MAX_OUTPUT_TOKENS
+from app.config.settings import settings
 from openai import AsyncOpenAI
 
 SUMMARY_TRIGGER_TOKENS = 5000
 RECENT_HISTORY_TARGET_TOKENS = 3000
 
-client = AsyncOpenAI()
+client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 @dataclass
@@ -41,7 +41,7 @@ async def generate_updated_summary(
                 {formatted_messages}
                 """.strip()
     response = await client.responses.create(
-        model=OPENAI_MODEL,
+        model=settings.openai_model,
         instructions="""
                     Create an updated factual summary of the conversation.
 
@@ -64,7 +64,7 @@ async def generate_updated_summary(
                     Keep the summary concise but preserve information that could matter later.
                     """.strip(),
         input=input_text,
-        max_output_tokens=SUMMARY_MAX_OUTPUT_TOKENS,
+        max_output_tokens=settings.summary_max_output_tokens,
     )
     summary_text = response.output_text.strip()
 

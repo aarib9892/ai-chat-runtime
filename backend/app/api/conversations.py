@@ -4,7 +4,7 @@ import logging
 from uuid import UUID
 from app.runtime.concurrency import agent_semaphore
 import asyncpg
-from app.config.settings import AGENT_QUEUE_TIMEOUT_SECONDS
+from app.config.settings import settings
 from app.db.database import get_pool
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -235,7 +235,7 @@ async def ask_conversation(
         try:
             await asyncio.wait_for(
                 agent_semaphore.acquire(),
-                timeout=(AGENT_QUEUE_TIMEOUT_SECONDS),
+                timeout=(settings.agent_queue_timeout_seconds),
             )
 
             agent_slot_acquired = True

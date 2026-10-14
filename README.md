@@ -17,6 +17,7 @@ AI Chat Runtime is a full-stack chat application with persisted conversations an
 
 ```text
 ai-chat-runtime/
+├── docker-compose.yml       # Production-style local deployment
 ├── backend/
 │   ├── app/                 # FastAPI application
 │   ├── pyproject.toml       # Backend dependency manifest
@@ -31,6 +32,7 @@ ai-chat-runtime/
 - Node.js 20 or later and npm
 - PostgreSQL
 - An OpenAI API key
+- Docker and Docker Compose (optional, for the container deployment)
 
 ## Run locally
 
@@ -40,7 +42,7 @@ ai-chat-runtime/
    cp backend/.env.example backend/.env
    ```
 
-   Set `DATABASE_URL` to a PostgreSQL connection string and `OPENAI_API_KEY` to a valid API key. The local `.env` file is intentionally ignored by Git.
+   Set `DATABASE_URL`, `OPENAI_API_KEY`, and `OPENAI_MODEL`. The local `.env` file is intentionally ignored by Git.
 
 2. Create the database and apply all migrations in order. Adjust the connection string for your PostgreSQL installation if needed:
 
@@ -58,8 +60,7 @@ ai-chat-runtime/
 
    ```bash
    cd backend
-   uv run --with asyncpg --with openai \
-     fastapi dev app/main.py
+   uv run fastapi dev app/main.py
    ```
 
    The API starts on <http://127.0.0.1:8000>.
@@ -76,7 +77,7 @@ ai-chat-runtime/
 
 ### Backend dependency note
 
-`backend/pyproject.toml` declares the backend project, token counting, and PostgreSQL vector support. The application source also imports `asyncpg` and `openai`, so the startup command installs those two packages for the run without altering the project files. Python-dotenv is provided through the existing `fastapi[standard]` dependency.
+`backend/pyproject.toml` declares all backend runtime dependencies, including the OpenAI client, PostgreSQL driver, and settings validation.
 
 ## Environment variables
 
@@ -84,6 +85,25 @@ ai-chat-runtime/
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | PostgreSQL connection string used to create the application pool. |
 | `OPENAI_API_KEY` | Yes | API key used by the OpenAI client. |
+| `OPENAI_MODEL` | Yes | Supported Responses API model used for chat and summaries. |
+
+## Run with Docker Compose
+
+1. Create a local root environment file from the safe template:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Set `POSTGRES_PASSWORD` and `OPENAI_API_KEY` in the ignored `.env` file. Do not commit that file.
+
+3. Build and start the stack:
+
+   ```bash
+   docker compose up --build
+   ```
+
+The frontend is available at <http://localhost:3000>; it proxies `/api/` to the backend. The Compose migration service runs before the backend starts. For configuration, readiness, and existing-database guidance, see [container deployment](docs/container-deployment.md).
 
 ## API
 
@@ -114,4 +134,4 @@ npm run build
 
 ## Git hygiene
 
-Environment files are ignored in both application directories. Backend virtual environments, Python cache files, frontend dependencies, and build output are also excluded from version control. Use `backend/.env.example` as the safe starting point for local backend configuration; never commit credentials.
+Environment files are ignored at the repository root and in application directories. Backend virtual environments, Python cache files, frontend dependencies, and build output are also excluded from version control. Use `.env.example` or `backend/.env.example` as safe starting points; never commit credentials.

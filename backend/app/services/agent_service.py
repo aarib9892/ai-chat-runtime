@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import openai
-from app.config.llm_config import MAX_OUTPUT_TOKENS, OPENAI_MODEL
+from app.config.settings import settings
 from app.errors import AppError
 from app.services.agent_events import (
     AgentCompleted,
@@ -25,9 +25,9 @@ from app.services.provider_errors import map_openai_error
 from app.services.tool_service import execute_tool
 from app.tools.definitions import TOOLS
 
-MAX_AGENT_STEPS = 5
-MAX_AGENT_TOOL_CALLS = 8
-MAX_IDENTICAL_TOOL_CALLS = 2
+MAX_AGENT_STEPS = settings.max_agent_steps
+MAX_AGENT_TOOL_CALLS = settings.max_agent_tool_calls
+MAX_IDENTICAL_TOOL_CALLS = settings.max_identical_tool_calls
 
 
 @dataclass(frozen=True)
@@ -95,12 +95,12 @@ async def stream_agent(
         yield AgentStepStarted(step=step_number)
 
         request_kwargs: dict[str, Any] = {
-            "model": OPENAI_MODEL,
+            "model": settings.openai_model,
             "input": current_input,
             "tools": TOOLS,
             "tool_choice": "auto",
             "parallel_tool_calls": False,
-            "max_output_tokens": MAX_OUTPUT_TOKENS,
+            "max_output_tokens": settings.max_output_tokens,
             "stream": True,
         }
         if previous_response_id is not None:

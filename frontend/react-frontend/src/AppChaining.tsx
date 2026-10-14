@@ -171,7 +171,7 @@ function App() {
     }
   };
 
-  const stopStreaming = (e: Event) => {
+  const stopStreaming = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
 

@@ -2,7 +2,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 
-from app.config.settings import ASK_RATE_LIMIT, ASK_RATE_WINDOW_SECONDS
+from app.config.settings import settings
 
 
 @dataclass
@@ -56,6 +56,6 @@ class RateLimiter:
 
 
 ask_rate_limiter = RateLimiter(
-    limit=ASK_RATE_LIMIT,
-    window_seconds=ASK_RATE_WINDOW_SECONDS,
+    limit=settings.ask_rate_limit,
+    window_seconds=settings.ask_rate_window_seconds,
 )

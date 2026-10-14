@@ -1,10 +1,9 @@
-from dotenv import load_dotenv
 from fastapi.exceptions import RequestValidationError
 
-load_dotenv()
+from app.db.database import get_pool
 from contextlib import asynccontextmanager
 from app.db.database import connect_db, close_db
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 
@@ -16,7 +15,8 @@ from app.middleware.request_id import (
 from app.observability.logging import (
     configure_logging,
 )
-from fastapi import Request
+from app.config.settings import settings
+
 from fastapi.responses import JSONResponse
 
 from app.errors import AppError
@@ -36,22 +36,33 @@ async def lifespan(app: FastAPI):
 
 
 configure_logging()
-app = FastAPI(title="AI Chat Runtime", lifespan=lifespan)
+app = FastAPI(
+    title="AI Chat Runtime",
+    lifespan=lifespan,
+    docs_url=(None if settings.is_production else "/docs"),
+    redoc_url=(None if settings.is_production else "/redoc"),
+    openapi_url=(None if settings.is_production else "/openapi.json"),
+)
 app.add_middleware(RequestIdMiddleware)
 # 1. Define the domains allowed to access your API
-origins = [
-    "http://localhost:3000",  # Common React/Next.js local port
-    "http://localhost:5173",  # Common Vite/Vue local port
-    "https://yourfrontend.com",  # Production domain
-]
+origins = settings.parsed_cors_origins
 
 # 2. Add the CORS middleware to your FastAPI app
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # Whitelist of domains
     allow_credentials=True,  # Allow cookies and authentication headers
-    allow_methods=["*"],  # Allow all standard HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=[
+        "GET",
+        "POST",
+        "OPTIONS",
+    ],  # Allow all standard HTTP methods (GET, POST, etc.)
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Request-ID",
+    ],  # Allow all headers
+    expose_headers=["X-Request-ID"],
 )
 
 
@@ -120,6 +131,27 @@ async def unexpected_error_handler(
             }
         },
     )
+
+
+@app.get(
+    "/health/ready",
+    include_in_schema=False,
+)
+async def health_ready():
+    try:
+        pool = get_pool()
+
+        await pool.fetchval("SELECT 1")
+
+        return {
+            "status": "ready",
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+            detail="Service not ready.",
+        )
 
 
 app.include_router(chat_router, prefix="/api")

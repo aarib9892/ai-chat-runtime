@@ -1,20 +1,17 @@
 import os
 import asyncpg
-from dotenv import load_dotenv
 from pgvector.asyncpg import register_vector
+from app.config.settings import settings
 
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
 _pool: asyncpg.Pool | None = None
 
 
 async def connect_db() -> None:
     global _pool
-    if not DATABASE_URL:
+    if not settings.database_url:
         raise RuntimeError("DATABASE_URL is not configured")
     _pool = await asyncpg.create_pool(
-        dsn=DATABASE_URL, min_size=1, max_size=5, init=init_connection
+        dsn=settings.database_url, min_size=1, max_size=5, init=init_connection
     )
 
     async with _pool.acquire() as connection:

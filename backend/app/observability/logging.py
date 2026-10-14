@@ -5,6 +5,8 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
+from app.config.settings import settings
+
 request_id_context: ContextVar[str | None] = ContextVar(
     "request_id",
     default=None,
@@ -75,7 +77,7 @@ def configure_logging() -> None:
 
     app_logger = logging.getLogger("app")
 
-    app_logger.setLevel(logging.INFO)
+    app_logger.setLevel(settings.log_level)
 
     app_logger.handlers.clear()
 

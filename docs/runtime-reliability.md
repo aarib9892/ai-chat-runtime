@@ -4,7 +4,7 @@ The conversation endpoint has process-local safeguards for overload, structured 
 
 ## Request and provider errors
 
-Every HTTP response receives an `X-Request-ID` header. If the caller supplies a valid ASCII identifier (letters, digits, `.`, `_`, or `-`, up to 128 characters), the service preserves it; otherwise it creates one. Validation and application errors use this envelope:
+Every HTTP response receives an `X-Request-ID` header. If the caller supplies a valid ASCII identifier (letters, digits, `.`, `_`, or `-`, up to 128 characters), the service preserves it; otherwise it creates one. The header is exposed to allowed CORS origins. Validation and application errors use this envelope:
 
 ```json
 {

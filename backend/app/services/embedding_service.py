@@ -1,20 +1,17 @@
 from openai import AsyncOpenAI
 
-from app.config.llm_config import (
-    EMBEDDING_MODEL,
-    EMBEDDING_DIMENSIONS,
-)
+from app.config.settings import settings
 
-client = AsyncOpenAI()
+client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 async def embed_text(
     text: str,
 ) -> list[float]:
     response = await client.embeddings.create(
-        model=EMBEDDING_MODEL,
+        model=settings.embedding_model,
         input=text,
-        dimensions=EMBEDDING_DIMENSIONS,
+        dimensions=settings.embedding_dimensions,
     )
 
     embedding = response.data[0].embedding
@@ -30,9 +27,9 @@ async def embed_texts(
         return []
 
     response = await client.embeddings.create(
-        model=EMBEDDING_MODEL,
+        model=settings.embedding_model,
         input=texts,
-        dimensions=EMBEDDING_DIMENSIONS,
+        dimensions=settings.embedding_dimensions,
     )
 
     embeddings = [item.embedding for item in response.data]
@@ -42,8 +39,8 @@ async def embed_texts(
 
 
 def _validate_embedding_dimensions(embedding: list[float]) -> None:
-    if len(embedding) != EMBEDDING_DIMENSIONS:
+    if len(embedding) != settings.embedding_dimensions:
         raise ValueError(
-            f"Expected {EMBEDDING_DIMENSIONS} embedding dimensions, "
+            f"Expected {settings.embedding_dimensions} embedding dimensions, "
             f"received {len(embedding)}"
         )

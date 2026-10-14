@@ -1,7 +1,4 @@
-from app.config.settings import (
-    OPENAI_INPUT_COST_PER_1M_USD,
-    OPENAI_OUTPUT_COST_PER_1M_USD,
-)
+from app.config.settings import settings
 
 
 def estimate_openai_cost_usd(
@@ -9,8 +6,8 @@ def estimate_openai_cost_usd(
     output_tokens: int,
 ) -> float:
 
-    input_cost = input_tokens / 1_000_000 * OPENAI_INPUT_COST_PER_1M_USD
+    input_cost = input_tokens / 1_000_000 * settings.openai_input_cost_per_1m_usd
 
-    output_cost = output_tokens / 1_000_000 * OPENAI_OUTPUT_COST_PER_1M_USD
+    output_cost = output_tokens / 1_000_000 * settings.openai_output_cost_per_1m_usd
 
     return input_cost + output_cost
