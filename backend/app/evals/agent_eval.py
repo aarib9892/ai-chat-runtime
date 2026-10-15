@@ -1,5 +1,6 @@
 import asyncio
 import re
+
 from dataclasses import dataclass
 from typing import Callable, Literal
 
@@ -29,17 +30,13 @@ class AgentEvalCase:
     expected_terminal: TerminalState = "completed"
 
     expected_execution_ok: list[bool] | None = None
-
     expected_steps: int | None = None
-
     expected_incomplete_reason: str | None = None
 
     final_answer_check: Callable[[str], bool] | None = None
 
     max_steps: int = 5
-
     max_tool_calls: int = 8
-
     max_identical_tool_calls: int = 2
 
 
@@ -51,25 +48,26 @@ class AgentEvalObservation:
     steps: int
 
     completed: bool
-
     incomplete_reason: str | None
 
     final_text: str
-
     exception: str | None
 
 
 @dataclass
 class AgentEvalResult:
     case: AgentEvalCase
-
     observation: AgentEvalObservation
-
     checks: dict[str, bool]
 
     @property
     def passed(self) -> bool:
         return all(self.checks.values())
+
+
+# ============================================================
+# Final answer helpers
+# ============================================================
 
 
 def normalize_number_text(
@@ -100,7 +98,9 @@ def contains_number(
 
     expected_text = str(expected)
 
-    def check(text: str) -> bool:
+    def check(
+        text: str,
+    ) -> bool:
         normalized = normalize_number_text(text)
 
         return expected_text in normalized
@@ -114,7 +114,9 @@ def contains_all_numbers(
 
     expected_strings = [str(number) for number in expected_numbers]
 
-    def check(text: str) -> bool:
+    def check(
+        text: str,
+    ) -> bool:
         normalized = normalize_number_text(text)
 
         return all(expected in normalized for expected in expected_strings)
@@ -122,22 +124,24 @@ def contains_all_numbers(
     return check
 
 
+# ============================================================
+# Individual eval execution
+# ============================================================
+
+
 async def run_eval_case(
     case: AgentEvalCase,
 ) -> AgentEvalResult:
 
     tools: list[str] = []
-
     execution_ok: list[bool] = []
 
     highest_step = 0
 
     completed = False
-
     incomplete_reason = None
 
     final_text = ""
-
     exception = None
 
     try:
@@ -150,7 +154,7 @@ async def run_eval_case(
             ],
             max_steps=case.max_steps,
             max_tool_calls=case.max_tool_calls,
-            max_identical_tool_calls=case.max_identical_tool_calls,
+            max_identical_tool_calls=(case.max_identical_tool_calls),
         ):
 
             if isinstance(
@@ -267,14 +271,19 @@ async def run_eval_case(
     )
 
 
-async def main() -> bool:
+# ============================================================
+# Eval cases
+# ============================================================
 
-    cases = [
+
+def build_agent_eval_cases() -> list[AgentEvalCase]:
+
+    return [
         # ==================================
         # 1. Multi-step agent trajectory
         # ==================================
         AgentEvalCase(
-            name="multi_step_math_then_length",
+            name=("multi_step_math_then_length"),
             prompt=(
                 "Multiply 834 by 92. "
                 "Then use the text-length "
@@ -322,7 +331,7 @@ async def main() -> bool:
             expected_tools=[],
             expected_execution_ok=[],
             expected_steps=1,
-            final_answer_check=lambda text: (len(text.strip()) > 0),
+            final_answer_check=(lambda text: (len(text.strip()) > 0)),
         ),
         # ==================================
         # 4. Tool failure recovery
@@ -343,7 +352,7 @@ async def main() -> bool:
                 False,
             ],
             expected_steps=2,
-            final_answer_check=lambda text: ("zero" in text.lower()),
+            final_answer_check=(lambda text: ("zero" in text.lower())),
         ),
         # ==================================
         # 5. Max agent steps
@@ -357,7 +366,7 @@ async def main() -> bool:
                 "using the text-length tool."
             ),
             expected_tools=[],
-            expected_terminal=("incomplete"),
+            expected_terminal="incomplete",
             expected_execution_ok=[],
             expected_steps=1,
             expected_incomplete_reason=("max_agent_steps"),
@@ -381,7 +390,7 @@ async def main() -> bool:
             expected_execution_ok=[
                 True,
             ],
-            expected_terminal=("incomplete"),
+            expected_terminal="incomplete",
             expected_steps=2,
             expected_incomplete_reason=("max_tool_calls"),
             max_tool_calls=1,
@@ -396,89 +405,92 @@ async def main() -> bool:
         #
         # This verifies the guard PATH.
         AgentEvalCase(
-            name="repeated_tool_guard_path",
+            name=("repeated_tool_guard_path"),
             prompt=("Use the calculator tool " "to multiply 10 by 20."),
             expected_tools=[],
             expected_execution_ok=[],
-            expected_terminal=("incomplete"),
+            expected_terminal="incomplete",
             expected_steps=1,
             expected_incomplete_reason=("repeated_tool_call"),
             max_identical_tool_calls=0,
         ),
     ]
 
-    results: list[AgentEvalResult] = []
 
-    for case in cases:
+# ============================================================
+# Printing
+# ============================================================
 
-        print("\n" + "=" * 60)
 
-        print(f"CASE: {case.name}")
+def print_eval_result(
+    result: AgentEvalResult,
+) -> None:
 
-        print("=" * 60)
+    observation = result.observation
 
-        result = await run_eval_case(case)
+    print("\n" + "=" * 60)
 
-        results.append(result)
+    print(f"CASE: " f"{result.case.name}")
 
-        observation = result.observation
+    print("=" * 60)
 
+    print(
+        "Tools:",
+        observation.tools,
+    )
+
+    print(
+        "Execution:",
+        observation.execution_ok,
+    )
+
+    print(
+        "Steps:",
+        observation.steps,
+    )
+
+    print(
+        "Completed:",
+        observation.completed,
+    )
+
+    print(
+        "Incomplete reason:",
+        observation.incomplete_reason,
+    )
+
+    if observation.final_text:
         print(
-            "Tools:",
-            observation.tools,
+            "Final:",
+            observation.final_text,
         )
 
+    if observation.exception:
         print(
-            "Execution:",
-            observation.execution_ok,
+            "Exception:",
+            observation.exception,
         )
 
-        print(
-            "Steps:",
-            observation.steps,
-        )
+    print("\nChecks:")
 
-        print(
-            "Completed:",
-            observation.completed,
-        )
+    for (
+        check_name,
+        passed,
+    ) in result.checks.items():
 
-        print(
-            "Incomplete reason:",
-            observation.incomplete_reason,
-        )
+        symbol = "PASS" if passed else "FAIL"
 
-        if observation.final_text:
-            print(
-                "Final:",
-                observation.final_text,
-            )
+        print(f"  {symbol:<4} " f"{check_name}")
 
-        if observation.exception:
-            print(
-                "Exception:",
-                observation.exception,
-            )
+    print(
+        "\nRESULT:",
+        ("PASS" if result.passed else "FAIL"),
+    )
 
-        print("\nChecks:")
 
-        for (
-            check_name,
-            passed,
-        ) in result.checks.items():
-
-            symbol = "PASS" if passed else "FAIL"
-
-            print(f"  {symbol:<4} " f"{check_name}")
-
-        print(
-            "\nRESULT:",
-            "PASS" if result.passed else "FAIL",
-        )
-
-    # ======================================
-    # Overall summary
-    # ======================================
+def print_eval_summary(
+    results: list[AgentEvalResult],
+) -> None:
 
     passed_count = sum(result.passed for result in results)
 
@@ -493,13 +505,52 @@ async def main() -> bool:
     print()
 
     for result in results:
-
         symbol = "PASS" if result.passed else "FAIL"
 
         print(f"{symbol:<4} " f"{result.case.name}")
 
+
+# ============================================================
+# Public reusable runner
+# ============================================================
+
+
+async def run_agent_eval() -> bool:
+    """
+    Run the complete live agent eval suite.
+
+    Returns:
+        True when every case passes.
+        False when one or more cases fail.
+    """
+
+    cases = build_agent_eval_cases()
+
+    results: list[AgentEvalResult] = []
+
+    for case in cases:
+        result = await run_eval_case(case)
+
+        results.append(result)
+
+        print_eval_result(result)
+
+    print_eval_summary(results)
+
     return all(result.passed for result in results)
 
 
+# ============================================================
+# Standalone CLI entrypoint
+# ============================================================
+
+
+async def main() -> None:
+    passed = await run_agent_eval()
+
+    if not passed:
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
-    raise SystemExit(0 if asyncio.run(main()) else 1)
+    asyncio.run(main())
